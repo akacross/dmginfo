@@ -1,11 +1,8 @@
 script_name("Dmginfo")
 script_author("akacross")
-script_version("0.1.12")
 script_url("https://akacross.net/")
 
--- AutoUpdate --
 local script_version = 1.2
--- AutoUpdate --
 
 if getMoonloaderVersion() >= 27 then
 	require 'libstd.deps' {
