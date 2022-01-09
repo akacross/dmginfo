@@ -109,11 +109,13 @@ function main()
 		createfont(i)
 	end
 
-	if not update then
-		sampRegisterChatCommand("dmg", function() main_window_state[0] = not main_window_state[0] end)
-	else
-		sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} New version found! The update is in progress..", -1)
-	end
+	sampRegisterChatCommand("dmg", function() 
+		if not update then
+			main_window_state[0] = not main_window_state[0] 
+		else
+			sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} New version found! The update is in progress..", -1)
+		end
+	end)
 	
 	while true do wait(0)
 		if update then
