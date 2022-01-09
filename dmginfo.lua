@@ -113,7 +113,7 @@ function main()
 		if not update then
 			main_window_state[0] = not main_window_state[0] 
 		else
-			sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} New version found! The update is in progress..", -1)
+			sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} The update is in progress.. Please wait..", -1)
 		end
 	end)
 	
