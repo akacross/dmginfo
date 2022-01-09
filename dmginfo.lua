@@ -39,8 +39,8 @@ local dlstatus = require('moonloader').download_status
 local https = require 'ssl.https'
 local audiopath = getGameDirectory() .. "\\moonloader\\resource\\audio\\dmginfo\\"
 local script_path = thisScript().path
-local script_url = "https://raw.githubusercontent.com/akacross/AutoUpdate/main/dmginfo.lua"
-local update_url = "https://raw.githubusercontent.com/akacross/AutoUpdate/main/dmginfo.txt"
+local script_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.lua"
+local update_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.txt"
 
 local function loadIconicFont(fontSize)
     local config = imgui.ImFontConfig()
