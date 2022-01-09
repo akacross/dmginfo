@@ -119,8 +119,11 @@ function main()
 	
 	while true do wait(0)
 		if update then
-			update = false
-			lua_thread.create(function() wait(20000) thisScript():reload() end)
+			lua_thread.create(function() 
+				wait(20000) 
+				thisScript():reload()
+				update = false
+			end)
 		end
 	end
 end
