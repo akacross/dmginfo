@@ -24,6 +24,7 @@ local mem = require 'memory'
 local encoding = require 'encoding'
 encoding.default = 'CP1251'
 local u8 = encoding.UTF8
+local lfs = require 'lfs'
 --local mimgui_addons = require 'mimgui_addons'
 local faicons = require 'fa-icons'
 local ti = require 'tabler_icons'
