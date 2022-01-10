@@ -401,26 +401,6 @@ function sound_dropdownmenu(i)
 	
 end
 
-function scanGameFolder(path, tables)
-    for file in lfs.dir(path) do
-        if file ~= "." and file ~= ".." then
-            local f = path..'\\'..file
-            --print ("\t "..f)
-			--local file3 = string.gsub(file_extension, "(.+)%..+", "Test")
-			local file_extension = string.match(file, "([^\\%.]+)$") -- Avoids double "extension" file names from being included and seen as "audiofile"
-            if file_extension:match("mp3") or file_extension:match("mp4") or file_extension:match("wav") or file_extension:match("m4a") or file_extension:match("flac") or file_extension:match("m4r") or file_extension:match("ogg")
-			or file_extension:match("mp2") or file_extension:match("amr") or file_extension:match("wma") or file_extension:match("aac") or file_extension:match("aiff") then
-				table.insert(tables, file)
-                tables[file] = f
-            end 
-            if lfs.attributes(f, "mode") == "directory" then
-                tables = scanGameFolder(f, tables)
-            end 
-        end
-    end
-    return tables
-end
-
 function onD3DPresent()
 	for k, v in pairs(giveDamage) do
 		if os.time() > v["time"] then
@@ -618,6 +598,26 @@ function join_argb_int(a, r, g, b)
     argb = bit.bor(argb, bit.lshift(r * 255, 16))
     argb = bit.bor(argb, bit.lshift(a, 24))
     return argb
+end
+
+function scanGameFolder(path, tables)
+    for file in lfs.dir(path) do
+        if file ~= "." and file ~= ".." then
+            local f = path..'\\'..file
+            --print ("\t "..f)
+			--local file3 = string.gsub(file_extension, "(.+)%..+", "Test")
+			local file_extension = string.match(file, "([^\\%.]+)$") -- Avoids double "extension" file names from being included and seen as "audiofile"
+            if file_extension:match("mp3") or file_extension:match("mp4") or file_extension:match("wav") or file_extension:match("m4a") or file_extension:match("flac") or file_extension:match("m4r") or file_extension:match("ogg")
+			or file_extension:match("mp2") or file_extension:match("amr") or file_extension:match("wma") or file_extension:match("aac") or file_extension:match("aiff") then
+				table.insert(tables, file)
+                tables[file] = f
+            end 
+            if lfs.attributes(f, "mode") == "directory" then
+                tables = scanGameFolder(f, tables)
+            end 
+        end
+    end
+    return tables
 end
 
 function update_script()
