@@ -88,17 +88,7 @@ function main()
 	repeat wait(0) until isSampAvailable()
 	repeat wait(0) until sampGetGamestate() == 3
 	
-	update_text = https.request(update_url)
-	update_version = update_text:match("version: (.+)")
-	if tonumber(update_version) > script_version then
-		sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} New version found! The update is in progress..", -1)
-		downloadUrlToFile(script_url, script_path, function(id, status)
-			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-				sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} The update was successful!", -1)
-				update = true
-			end
-		end)
-	end
+	update()
 
 	paths = scanGameFolder(audiopath, paths)
 
@@ -606,4 +596,18 @@ function join_argb_int(a, r, g, b)
     argb = bit.bor(argb, bit.lshift(r * 255, 16))
     argb = bit.bor(argb, bit.lshift(a, 24))
     return argb
+end
+
+function update()
+	update_text = https.request(update_url)
+	update_version = update_text:match("version: (.+)")
+	if tonumber(update_version) > script_version then
+		sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} New version found! The update is in progress..", -1)
+		downloadUrlToFile(script_url, script_path, function(id, status)
+			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
+				sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} The update was successful!", -1)
+				update = true
+			end
+		end)
+	end
 end
