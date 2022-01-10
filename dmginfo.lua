@@ -35,7 +35,7 @@ local path = getWorkingDirectory() .. '\\config\\'
 local cfg = path .. 'dmginfo.ini'
 local dlstatus = require('moonloader').download_status
 local https = require 'ssl.https'
-local audiopath = getGameDirectory() .. "\\moonloader\\resource\\audio\\dmginfo\\"
+local audiopath = getGameDirectory() .. "\\moonloader\\resource\\audio\\dmginfo"
 local script_path = thisScript().path
 local script_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.lua"
 local update_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.txt"
@@ -65,6 +65,12 @@ local dmg = {
 			"sound3.mp3",
 			"sound4.mp3"
 		},
+		paths = {
+			audiopath .. "\\sound1.mp3",
+			audiopath .. "\\sound2.mp3",
+			audiopath .. "\\sound3.mp3",
+			audiopath .. "\\sound4.mp3"
+		},
 		volumes = {
 			0.10,
 			0.10,
@@ -89,7 +95,7 @@ function main()
 	repeat wait(0) until isSampAvailable()
 	repeat wait(0) until sampGetGamestate() == 3
 	
-	update()
+	update_script()
 
 	paths = scanGameFolder(audiopath, paths)
 
@@ -218,10 +224,15 @@ function()
 			blankIni()
 		end 
 		imgui.SameLine()
+		if imgui.Button(ti.ICON_REFRESH .. 'Update') then
+			update_script()
+		end 
+		imgui.SameLine()
 		if imgui.Checkbox('Autosave', new.bool(dmg.autosave)) then 
 			dmg.autosave = not dmg.autosave 
 			saveIni() 
 		end  
+		
 			local names = {'Give:', 'Take:', 'Kill:', 'Death:'}
 			for i = 1, 4 do
 				if i >= 1 and i <= 2 then
@@ -345,9 +356,9 @@ function sound_dropdownmenu(i)
 					if k:match(".+%.mp3") or k:match(".+%.mp4") or k:match(".+%.wav") or k:match(".+%.m4a") or k:match(".+%.flac") or k:match(".+%.m4r") or k:match(".+%.ogg") or k:match(".+%.mp2") or k:match(".+%.amr") or k:match(".+%.wma") or k:match(".+%.aac") or k:match(".+%.aiff") then
 						if imgui.Selectable(u8(k), true) then 
 							dmg.audio.sounds[i] = k
-							print(audiopath .. dmg.audio.sounds[i])
-							if doesFileExist(audiopath .. dmg.audio.sounds[i]) then
-								sound_play = loadAudioStream(audiopath .. dmg.audio.sounds[i])
+							dmg.audio.paths[i] = v
+							if doesFileExist(dmg.audio.paths[i]) then
+								sound_play = loadAudioStream(dmg.audio.paths[i])
 								setAudioStreamVolume(sound_play, dmg.audio.volumes[i])
 								setAudioStreamState(sound_play, 1)
 							else 
@@ -410,7 +421,7 @@ function onD3DPresent()
 				local x, y, z = v["pos"].x, v["pos"].y, v["pos"].z
 				if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) and isPointOnScreen(x, y, z, 0.0) then
 					local sx, sy = convert3DCoordsToScreen(x, y, z)
-					renderFontDrawText(fontid[1], tostring(math.floor(v["damage"])), sx, sy, v["color"])
+					renderFontDrawText(fontid[1], '+' .. tostring(math.floor(v["damage"])), sx, sy, v["color"])
 				end
 			end
 		end
@@ -425,7 +436,7 @@ function onD3DPresent()
 				local x, y, z = v["pos"].x, v["pos"].y, v["pos"].z
 				if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) and isPointOnScreen(x, y, z, 0.0) then
 					local sx, sy = convert3DCoordsToScreen(x, y, z)
-					renderFontDrawText(fontid[2], tostring(math.floor(v["damage"])), sx, sy, v["color"])
+					renderFontDrawText(fontid[2], '-' .. tostring(math.floor(v["damage"])), sx, sy, v["color"])
 				end
 			end
 		end
@@ -452,8 +463,8 @@ function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
 			end
 
 			if dmg.audio.toggle[1] then
-				if doesFileExist(audiopath .. dmg.audio.sounds[1]) then
-					sound_give = loadAudioStream(audiopath .. dmg.audio.sounds[1])
+				if doesFileExist(dmg.audio.paths[1]) then
+					sound_give = loadAudioStream(dmg.audio.paths[1])
 					setAudioStreamVolume(sound_give, dmg.audio.volumes[1])
 					setAudioStreamState(sound_give, 1)
 				else
@@ -481,8 +492,8 @@ function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
 			table.insert(takeDamage, tbl);
 
 			if dmg.audio.toggle[2] then
-				if doesFileExist(audiopath .. dmg.audio.sounds[2]) then
-					sound_take = loadAudioStream(audiopath .. dmg.audio.sounds[2])
+				if doesFileExist(dmg.audio.paths[2]) then
+					sound_take = loadAudioStream(dmg.audio.paths[2])
 					setAudioStreamVolume(sound_take, dmg.audio.volumes[2])
 					setAudioStreamState(sound_take, 1)
 				else
@@ -498,8 +509,8 @@ function sampev.onPlayerDeathNotification(killerid, killedid, reason)
 	if res then
 		if killerid == id then
 			if dmg.audio.toggle[3] then
-				if doesFileExist(audiopath .. dmg.audio.sounds[3]) then
-					sound_kill = loadAudioStream(audiopath .. dmg.audio.sounds[3])
+				if doesFileExist(dmg.audio.paths[3]) then
+					sound_kill = loadAudioStream(dmg.audio.paths[3])
 					setAudioStreamVolume(sound_kill, dmg.audio.volumes[3])
 					setAudioStreamState(sound_kill, 1)
 				else
@@ -509,8 +520,8 @@ function sampev.onPlayerDeathNotification(killerid, killedid, reason)
 		end
 		if killedid == id then
 			if dmg.audio.toggle[4] then
-				if doesFileExist(audiopath .. dmg.audio.sounds[4]) then
-					sound_death = loadAudioStream(audiopath .. dmg.audio.sounds[4])
+				if doesFileExist(dmg.audio.paths[4]) then
+					sound_death = loadAudioStream(dmg.audio.paths[4])
 					setAudioStreamVolume(sound_death, dmg.audio.volumes[4])
 					setAudioStreamState(sound_death, 1)
 				else
@@ -599,7 +610,7 @@ function join_argb_int(a, r, g, b)
     return argb
 end
 
-function update()
+function update_script()
 	update_text = https.request(update_url)
 	update_version = update_text:match("version: (.+)")
 	if tonumber(update_version) > script_version then
@@ -610,5 +621,7 @@ function update()
 				update = true
 			end
 		end)
+	else
+		sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} No Update Found!", -1)
 	end
 end
