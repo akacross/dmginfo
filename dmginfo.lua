@@ -227,6 +227,15 @@ function()
 		if imgui.Button(ti.ICON_REFRESH .. 'Update') then
 			update_script()
 			sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} Checking for updates!", -1)
+			
+			update_text = https.request(update_url)
+			update_version = update_text:match("version: (.+)")
+			if tonumber(update_version) > script_version then
+			
+			else
+				sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} No Updates were found", -1)
+			end
+			
 		end 
 		imgui.SameLine()
 		if imgui.Checkbox('Autosave', new.bool(dmg.autosave)) then 
