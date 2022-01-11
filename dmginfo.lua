@@ -25,6 +25,7 @@ local encoding = require 'encoding'
 encoding.default = 'CP1251'
 local u8 = encoding.UTF8
 local lfs = require 'lfs'
+local wm = require 'lib.windows.message'
 --local mimgui_addons = require 'mimgui_addons'
 local faicons = require 'fa-icons'
 local ti = require 'tabler_icons'
@@ -226,22 +227,46 @@ function()
 		if imgui.Button(ti.ICON_DEVICE_FLOPPY.. 'Save') then
 			saveIni()
 		end 
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip('Save the Script')
+		end
+		imgui.SameLine()
+		if imgui.Checkbox('##autosave', new.bool(dmg.autosave)) then 
+			dmg.autosave = not dmg.autosave 
+			saveIni() 
+		end
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip('Autosave')
+		end
+		
 		imgui.SameLine()
 		if imgui.Button(ti.ICON_FILE_UPLOAD.. 'Load') then
 			loadIni()
 		end 
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip('Reload the Script')
+		end
 		imgui.SameLine()
 		if imgui.Button(ti.ICON_ERASER .. 'Reset') then
 			blankIni()
 		end 
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip('Reset the Script to default settings')
+		end
+		
 		imgui.SameLine()
 		if imgui.Button(ti.ICON_REFRESH .. 'Update') then
 			update_script()
 		end 
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip('Update the script')
+		end
 		imgui.SameLine()
-		if imgui.Checkbox('Autosave', new.bool(dmg.autosave)) then 
-			dmg.autosave = not dmg.autosave 
-			saveIni() 
+		if imgui.Checkbox('##autoupdate', new.bool(dmg.autoupdate)) then 
+			dmg.autoupdate = not dmg.autoupdate 
+		end
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip('Auto-Update')
 		end
 		
 		
@@ -267,6 +292,10 @@ function()
 							createfont(i)
 						end
 						imgui.PopItemWidth()
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip('Change the font')
+						end
+						
 						
 						imgui.SameLine()
 						local choices2 = {'Bold', 'Italics', 'Border', 'Shadow'}
@@ -285,63 +314,58 @@ function()
 						imgui.SameLine()	
 						imgui.PushItemWidth(95) 
 						tcolor = new.float[4](hex2rgba(dmg.color[i]))
-						if imgui.ColorEdit4('##color'..i, tcolor, imgui.ColorEditFlags.NoInputs + imgui.ColorEditFlags.NoLabel) then 
+						if imgui.ColorEdit4('Color##'..i, tcolor, imgui.ColorEditFlags.NoInputs + imgui.ColorEditFlags.NoLabel) then 
 							dmg.color[i] = join_argb(tcolor[3] * 255, tcolor[0] * 255, tcolor[1] * 255, tcolor[2] * 255) 
 						end 
 						imgui.PopItemWidth()
+						imgui.SameLine()
+						imgui.Text('Color')
 						
 						if imgui.IsItemHovered() then
 							imgui.SetTooltip('Color of text')
 						end
 						
 						imgui.SameLine()
-						imgui.BeginGroup()
-							if imgui.Button('+##'..i) and dmg.fontsize[i] < 72 then 
-								dmg.fontsize[i] = dmg.fontsize[i] + 1 
-								createfont(i)
-							end
-							
-							imgui.SameLine()
-							imgui.Text(tostring(dmg.fontsize[i]))
-							imgui.SameLine()
-							
-							if imgui.Button('-##'..i) and dmg.fontsize[i] > 4 then 
-								dmg.fontsize[i] = dmg.fontsize[i] - 1 
-								createfont(i)
-							end
-						imgui.EndGroup()
-						imgui.SameLine() 
 						
+						if imgui.Checkbox('Stacked##'..i, new.bool(dmg.stacked[i])) then 
+							dmg.stacked[i] = not dmg.stacked[i] 
+						end  
+						
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip('Stacked Damage Per-Player')
+						end
+						
+						local textsize = new.int(dmg.fontsize[i])
+						imgui.PushItemWidth(70)
+						if imgui.InputInt('Fontsize##'..i, textsize, 1, 100) then
+							if textsize[0] >= 4 then
+								if textsize[0] <= 72 then
+									dmg.fontsize[i] = textsize[0]
+								end
+							end
+						end 
+						imgui.PopItemWidth()
 						if imgui.IsItemHovered() then
 							imgui.SetTooltip('Size of text')
 						end
-						
 						imgui.SameLine()
-						imgui.BeginGroup()
-							if imgui.Button('+##2'..i) and dmg.time[i] < 10 then 
-								dmg.time[i] = dmg.time[i] + 1 
-								createfont(i)
+						local texttime = new.int(dmg.time[i])
+						imgui.PushItemWidth(70)
+						if imgui.InputInt('Time##2'..i, texttime, 1, 100) then
+							if texttime[0] >= 1 then
+								if texttime[0] <= 10 then
+									dmg.time[i] = texttime[0]
+								end
 							end
-							
-							imgui.SameLine()
-							imgui.Text(tostring(dmg.time[i]))
-							imgui.SameLine()
-							
-							if imgui.Button('-##2'..i) and dmg.time[i] > 1 then 
-								dmg.time[i] = dmg.time[i] - 1 
-								createfont(i)
-							end
-						imgui.EndGroup()
+						end 
+						imgui.PopItemWidth()
+						
 						
 						if imgui.IsItemHovered() then
 							imgui.SetTooltip('Displayed time')
 						end
 						
 						sound_dropdownmenu(i)
-						
-						if imgui.Checkbox('Stacked##'..i, new.bool(dmg.stacked[i])) then 
-							dmg.stacked[i] = not dmg.stacked[i] 
-						end  
 					else
 						imgui.Text('Disabled') 
 					end
@@ -356,6 +380,17 @@ function()
 			end
 	imgui.End()
 end)
+
+function onWindowMessage(msg, wparam, lparam)
+    if wparam == VK_ESCAPE and main_window_state[0] then
+        if msg == wm.WM_KEYDOWN then
+            consumeWindowMessage(true, false)
+        end
+        if msg == wm.WM_KEYUP then
+            main_window_state[0] = false
+        end
+    end
+end
 
 function sound_dropdownmenu(i)
 	if imgui.Checkbox('##3'..i, new.bool(dmg.audio.toggle[i])) then 
@@ -622,8 +657,6 @@ function scanGameFolder(path, tables)
     for file in lfs.dir(path) do
         if file ~= "." and file ~= ".." then
             local f = path..'\\'..file
-            --print ("\t "..f)
-			--local file3 = string.gsub(file_extension, "(.+)%..+", "Test")
 			local file_extension = string.match(file, "([^\\%.]+)$") -- Avoids double "extension" file names from being included and seen as "audiofile"
             if file_extension:match("mp3") or file_extension:match("mp4") or file_extension:match("wav") or file_extension:match("m4a") or file_extension:match("flac") or file_extension:match("m4r") or file_extension:match("ogg")
 			or file_extension:match("mp2") or file_extension:match("amr") or file_extension:match("wma") or file_extension:match("aac") or file_extension:match("aiff") then
