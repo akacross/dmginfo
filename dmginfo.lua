@@ -52,6 +52,7 @@ local blank = {}
 local dmg = {
 	toggle = {true,true},
 	autosave = false,
+	autoupdate = false,
 	stacked = {true, true},
 	font = {'Aerial','Aerial'},
 	fontsize = {12,12},
@@ -82,11 +83,11 @@ local dmg = {
 }
 local main_window_state = new.bool(false)
 local mainc = imgui.ImVec4(0.92, 0.27, 0.92, 1.0)
+local update = false
 local fontid = {}
+local paths = {}
 local giveDamage = {}
 local takeDamage = {}
-local update = false
-local paths = {}
 local Give_StackedDamage = 0
 local Give_PreviousID = 0
 local Give_PreviousDamage = 0
@@ -102,7 +103,9 @@ function main()
 	repeat wait(0) until isSampAvailable()
 	repeat wait(0) until sampGetGamestate() == 3
 	
-	update_script()
+	if dmg.autoupdate then
+		update_script()
+	end
 
 	paths = scanGameFolder(audiopath, paths)
 
@@ -234,16 +237,6 @@ function()
 		imgui.SameLine()
 		if imgui.Button(ti.ICON_REFRESH .. 'Update') then
 			update_script()
-			message('CheckingForUpdates')
-			
-			update_text = https.request(update_url)
-			update_version = update_text:match("version: (.+)")
-			if tonumber(update_version) > script_version then
-			
-			else
-				message('NoUpdatesFound')
-			end
-			
 		end 
 		imgui.SameLine()
 		if imgui.Checkbox('Autosave', new.bool(dmg.autosave)) then 
@@ -380,13 +373,7 @@ function sound_dropdownmenu(i)
 						if imgui.Selectable(u8(k), true) then 
 							dmg.audio.sounds[i] = k
 							dmg.audio.paths[i] = v
-							if doesFileExist(dmg.audio.paths[i]) then
-								sound_play = loadAudioStream(dmg.audio.paths[i])
-								setAudioStreamVolume(sound_play, dmg.audio.volumes[i])
-								setAudioStreamState(sound_play, 1)
-							else 
-								message('ERROR')
-							end
+							playsound(i)
 						end
 					end
 				end
@@ -474,16 +461,7 @@ function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
 					}
 				}
 				table.insert(giveDamage, tbl);
-			end
-
-			if dmg.audio.toggle[1] then
-				if doesFileExist(dmg.audio.paths[1]) then
-					sound_give = loadAudioStream(dmg.audio.paths[1])
-					setAudioStreamVolume(sound_give, dmg.audio.volumes[1])
-					setAudioStreamState(sound_give, 1)
-				else
-					message('ERROR')
-				end
+				playsound(1)
 			end
 		end
 	end
@@ -515,16 +493,7 @@ function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
 				}
 			}
 			table.insert(takeDamage, tbl);
-
-			if dmg.audio.toggle[2] then
-				if doesFileExist(dmg.audio.paths[2]) then
-					sound_take = loadAudioStream(dmg.audio.paths[2])
-					setAudioStreamVolume(sound_take, dmg.audio.volumes[2])
-					setAudioStreamState(sound_take, 1)
-				else
-					message('ERROR')
-				end
-			end
+			playsound(2)
 		end
 	end
 end
@@ -534,26 +503,24 @@ function sampev.onPlayerDeathNotification(killerid, killedid, reason)
 	if res then
 		if killerid == id then
 			if dmg.audio.toggle[3] then
-				if doesFileExist(dmg.audio.paths[3]) then
-					sound_kill = loadAudioStream(dmg.audio.paths[3])
-					setAudioStreamVolume(sound_kill, dmg.audio.volumes[3])
-					setAudioStreamState(sound_kill, 1)
-				else
-					message('ERROR')
-				end
+				playsound(3)
 			end
 		end
 		if killedid == id then
 			if dmg.audio.toggle[4] then
-				if doesFileExist(dmg.audio.paths[4]) then
-					sound_death = loadAudioStream(dmg.audio.paths[4])
-					setAudioStreamVolume(sound_death, dmg.audio.volumes[4])
-					setAudioStreamState(sound_death, 1)
-				else
-					message('ERROR')
-				end
+				playsound(4)
 			end
 		end
+	end
+end
+
+function playsound(id)
+	if doesFileExist(dmg.audio.paths[id]) then
+		sound_death = loadAudioStream(dmg.audio.paths[id])
+		setAudioStreamVolume(sound_death, dmg.audio.volumes[id])
+		setAudioStreamState(sound_death, 1)
+	else
+		message('ERROR')
 	end
 end
 
@@ -683,5 +650,7 @@ function update_script()
 				update = true
 			end
 		end)
+	else
+		message('NoUpdatesFound')
 	end
 end
