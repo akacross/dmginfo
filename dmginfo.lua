@@ -2,7 +2,7 @@ script_name("Dmginfo")
 script_author("akacross")
 script_url("https://akacross.net/")
 
-local script_version = 1.3
+local script_version = 1.4
 
 if getMoonloaderVersion() >= 27 then
 	require 'libstd.deps' {
