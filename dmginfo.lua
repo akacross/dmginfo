@@ -125,7 +125,7 @@ function main()
 		if update then
 			main_window_state[0] = false
 			lua_thread.create(function() 
-				wait(10000) 
+				wait(20000) 
 				thisScript():reload()
 				update = false
 			end)
