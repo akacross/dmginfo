@@ -114,7 +114,7 @@ function main()
 		if not update then
 			main_window_state[0] = not main_window_state[0] 
 		else
-			sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} The update is in progress.. Please wait..", -1)
+			message('UpdateInProgress')
 		end
 	end)
 	
@@ -217,7 +217,7 @@ function()
 	local width, height = getScreenResolution()
 	imgui.SetNextWindowPos(imgui.ImVec2(width / 2, height / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
 	
-	imgui.Begin(ti.ICON_SETTINGS .. string.format("%s Settings - Version: %s", script.this.name,script.this.version), main_window_state, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+	imgui.Begin(ti.ICON_SETTINGS .. string.format("%s Settings - Version: %s", script.this.name, script_version), main_window_state, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
 	
 		if imgui.Button(ti.ICON_DEVICE_FLOPPY.. 'Save') then
 			saveIni()
@@ -233,14 +233,14 @@ function()
 		imgui.SameLine()
 		if imgui.Button(ti.ICON_REFRESH .. 'Update') then
 			update_script()
-			sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} Checking for updates!", -1)
+			message('CheckingForUpdates')
 			
 			update_text = https.request(update_url)
 			update_version = update_text:match("version: (.+)")
 			if tonumber(update_version) > script_version then
 			
 			else
-				sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} No Updates were found", -1)
+				message('NoUpdatesFound')
 			end
 			
 		end 
@@ -384,7 +384,7 @@ function sound_dropdownmenu(i)
 								setAudioStreamVolume(sound_play, dmg.audio.volumes[i])
 								setAudioStreamState(sound_play, 1)
 							else 
-								sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} Error missing sound file.")
+								message('ERROR')
 							end
 						end
 					end
@@ -481,7 +481,7 @@ function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
 					setAudioStreamVolume(sound_give, dmg.audio.volumes[1])
 					setAudioStreamState(sound_give, 1)
 				else
-					sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} Error missing sound file.")
+					message('ERROR')
 				end
 			end
 		end
@@ -521,7 +521,7 @@ function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
 					setAudioStreamVolume(sound_take, dmg.audio.volumes[2])
 					setAudioStreamState(sound_take, 1)
 				else
-					sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} Error missing sound file.")
+					message('ERROR')
 				end
 			end
 		end
@@ -538,7 +538,7 @@ function sampev.onPlayerDeathNotification(killerid, killedid, reason)
 					setAudioStreamVolume(sound_kill, dmg.audio.volumes[3])
 					setAudioStreamState(sound_kill, 1)
 				else
-					sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} Error missing sound file.")
+					message('ERROR')
 				end
 			end
 		end
@@ -549,9 +549,25 @@ function sampev.onPlayerDeathNotification(killerid, killedid, reason)
 					setAudioStreamVolume(sound_death, dmg.audio.volumes[4])
 					setAudioStreamState(sound_death, 1)
 				else
-					sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} Error missing sound file.")
+					message('ERROR')
 				end
 			end
+		end
+	end
+end
+
+function message(id)
+	local messages = {
+		{"ERROR", "Error missing sound file"},
+		{"UpdateInProgress", "The update is in progress.. Please wait.."},
+		{"CheckingforUpdates", "Checking for updates!"},
+		{"NoUpdatesFound", "No Updates were found"},
+		{"NewUpdate", "New version found! The update is in progress.."},
+		{"UpdateSuccessful", "The update was successful!"},
+	}
+	for k, v in pairs(messages) do
+		if id == v[1] then
+			sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} %s", script.this.name, v[2]), -1)
 		end
 	end
 end
@@ -658,10 +674,10 @@ function update_script()
 	update_text = https.request(update_url)
 	update_version = update_text:match("version: (.+)")
 	if tonumber(update_version) > script_version then
-		sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} New version found! The update is in progress..", -1)
+		message('NewUpdate')
 		downloadUrlToFile(script_url, script_path, function(id, status)
 			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-				sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} The update was successful!", -1)
+				message("UpdateSuccessful")
 				blankIni()
 				update = true
 			end
