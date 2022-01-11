@@ -52,6 +52,7 @@ local blank = {}
 local dmg = {
 	toggle = {true,true},
 	autosave = false,
+	stacked = {false, false},
 	font = {'Aerial','Aerial'},
 	fontsize = {12,12},
 	fontflag = {{true, false, true, true},{true, false, true, true}},
@@ -247,7 +248,8 @@ function()
 		if imgui.Checkbox('Autosave', new.bool(dmg.autosave)) then 
 			dmg.autosave = not dmg.autosave 
 			saveIni() 
-		end  
+		end
+		
 		
 			local names = {'Give:', 'Take:', 'Kill:', 'Death:'}
 			for i = 1, 4 do
@@ -255,13 +257,13 @@ function()
 					imgui.NewLine()	
 					imgui.SameLine(4) 
 					imgui.Text(names[i]) 
-				
 					
 					if imgui.Checkbox('##'..i, new.bool(dmg.toggle[i])) then 
 						dmg.toggle[i] = not dmg.toggle[i]
 					end  
 					imgui.SameLine()
 				
+					
 					if dmg.toggle[i] then
 						
 						imgui.PushItemWidth(95) 
@@ -342,6 +344,10 @@ function()
 						end
 						
 						sound_dropdownmenu(i)
+						
+						if imgui.Checkbox('Stacked##'..i, new.bool(dmg.stacked[i])) then 
+							dmg.stacked[i] = not dmg.stacked[i] 
+						end  
 					else
 						imgui.Text('Disabled') 
 					end
@@ -417,7 +423,7 @@ function onD3DPresent()
 				local x, y, z = v["pos"].x, v["pos"].y, v["pos"].z
 				if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) and isPointOnScreen(x, y, z, 0.0) then
 					local sx, sy = convert3DCoordsToScreen(x, y, z)
-					renderFontDrawText(fontid[1], '+' .. v["stacked"], sx, sy, v["color"])
+					renderFontDrawText(fontid[1], '+' .. (dmg.stacked[1] and v["stacked"] or v["damage"]), sx, sy, v["color"])
 				end
 			end
 		end
@@ -432,7 +438,7 @@ function onD3DPresent()
 				local x, y, z = v["pos"].x, v["pos"].y, v["pos"].z
 				if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) and isPointOnScreen(x, y, z, 0.0) then
 					local sx, sy = convert3DCoordsToScreen(x, y, z)
-					renderFontDrawText(fontid[2], '-' .. v["stacked"], sx, sy, v["color"])
+					renderFontDrawText(fontid[2], '-' .. (dmg.stacked[2] and v["stacked"] or v["damage"]), sx, sy, v["color"])
 				end
 			end
 		end
