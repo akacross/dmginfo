@@ -2,7 +2,7 @@ script_name("Dmginfo")
 script_author("akacross")
 script_url("https://akacross.net/")
 
-local script_version = 1.2
+local script_version = 1.3
 
 if getMoonloaderVersion() >= 27 then
 	require 'libstd.deps' {
@@ -86,6 +86,12 @@ local giveDamage = {}
 local takeDamage = {}
 local update = false
 local paths = {}
+local Give_StackedDamage = 0
+local Give_PreviousID = 0
+local Give_PreviousDamage = 0
+local Take_StackedDamage = 0
+local Take_PreviousID = 0
+local Take_PreviousDamage = 0
 
 function main()
 	blank = table.deepcopy(dmg)
@@ -411,7 +417,7 @@ function onD3DPresent()
 				local x, y, z = v["pos"].x, v["pos"].y, v["pos"].z
 				if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) and isPointOnScreen(x, y, z, 0.0) then
 					local sx, sy = convert3DCoordsToScreen(x, y, z)
-					renderFontDrawText(fontid[1], '+' .. tostring(math.floor(v["damage"])), sx, sy, v["color"])
+					renderFontDrawText(fontid[1], '+' .. v["stacked"], sx, sy, v["color"])
 				end
 			end
 		end
@@ -426,7 +432,7 @@ function onD3DPresent()
 				local x, y, z = v["pos"].x, v["pos"].y, v["pos"].z
 				if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) and isPointOnScreen(x, y, z, 0.0) then
 					local sx, sy = convert3DCoordsToScreen(x, y, z)
-					renderFontDrawText(fontid[2], '-' .. tostring(math.floor(v["damage"])), sx, sy, v["color"])
+					renderFontDrawText(fontid[2], '-' .. v["stacked"], sx, sy, v["color"])
 				end
 			end
 		end
@@ -439,9 +445,20 @@ function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
 			local result, playerhandle = sampGetCharHandleBySampPlayerId(targetID)
 			if result then
 				local px, py, pz = getCharCoordinates(playerhandle)
+				
+				local Give_ID = targetID
+				if Give_ID == Give_PreviousID then 
+					Give_StackedDamage = Give_StackedDamage + damage
+				else
+					Give_PreviousID = Give_ID
+					Give_PreviousDamage = damage
+					Give_StackedDamage = Give_PreviousDamage
+				end
+				
 				local tbl = {
 					["color"] = dmg.color[1],
-					["damage"] = damage,
+					["damage"] = math.floor(damage),
+					["stacked"] = math.floor(Give_StackedDamage),
 					["time"] = os.time() + dmg.time[1],
 					["pos"] = {
 						x = px,
@@ -469,9 +486,20 @@ function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
 	if math.floor(damage) ~= 0 then
 		if dmg.toggle[2] then
 			local px, py, pz = getCharCoordinates(ped)
+			
+			local Take_ID = senderID
+			if Take_ID == Take_PreviousID then 
+				Take_StackedDamage = Take_StackedDamage + damage
+			else
+				Take_PreviousID = Take_ID
+				Take_PreviousDamage = damage
+				Take_StackedDamage = Take_PreviousDamage
+			end
+			
 			local tbl = {
 				["color"] = dmg.color[2],
-				["damage"] = damage,
+				["damage"] = math.floor(damage),
+				["stacked"] = math.floor(Take_StackedDamage),
 				["time"] = os.time() + dmg.time[2],
 				["pos"] = {
 					x = px,
@@ -628,6 +656,7 @@ function update_script()
 		downloadUrlToFile(script_url, script_path, function(id, status)
 			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
 				sampAddChatMessage("{ABB2B9}[dmginfo]{FFFFFF} The update was successful!", -1)
+				blankIni()
 				update = true
 			end
 		end)
