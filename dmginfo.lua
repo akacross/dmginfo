@@ -86,14 +86,14 @@ local mainc = imgui.ImVec4(0.92, 0.27, 0.92, 1.0)
 local update = false
 local fontid = {}
 local paths = {}
-local giveDamage = {}
-local takeDamage = {}
-local Give_StackedDamage = 0
-local Give_PreviousID = 0
-local Give_PreviousDamage = 0
-local Take_StackedDamage = 0
-local Take_PreviousID = 0
-local Take_PreviousDamage = 0
+local give_Damage = {}
+local give_StackedDamage = 0
+local give_PreviousID = 0
+local give_PreviousDamage = 0
+local take_Damage = {}
+local take_StackedDamage = 0
+local take_PreviousID = 0
+local take_PreviousDamage = 0
 
 function main()
 	blank = table.deepcopy(dmg)
@@ -395,17 +395,6 @@ function()
 	imgui.End()
 end)
 
-function onWindowMessage(msg, wparam, lparam)
-    if wparam == VK_ESCAPE and main_window_state[0] then
-        if msg == wm.WM_KEYDOWN then
-            consumeWindowMessage(true, false)
-        end
-        if msg == wm.WM_KEYUP then
-            main_window_state[0] = false
-        end
-    end
-end
-
 function sound_dropdownmenu(i)
 	if imgui.Checkbox('##3'..i, new.bool(dmg.audio.toggle[i])) then 
 		dmg.audio.toggle[i] = not dmg.audio.toggle[i]
@@ -447,13 +436,12 @@ function sound_dropdownmenu(i)
 	else
 		imgui.Text('Disabled') 
 	end
-	
 end
 
 function onD3DPresent()
-	for k, v in pairs(giveDamage) do
+	for k, v in pairs(give_Damage) do
 		if os.time() > v["time"] then
-			table.remove(giveDamage, k)
+			table.remove(give_Damage, k)
 		else
 			if not isPauseMenuActive() and not sampIsDialogActive() and not sampIsScoreboardOpen() and not isSampfuncsConsoleActive() and sampGetChatDisplayMode() > 0 and dmg.toggle[1] then
 				local px, py, pz = getCharCoordinates(ped)
@@ -466,9 +454,9 @@ function onD3DPresent()
 		end
 	end
 
-	for k, v in pairs(takeDamage) do
+	for k, v in pairs(take_Damage) do
 		if os.time() > v["time"] then
-			table.remove(takeDamage, k)
+			table.remove(take_Damage, k)
 		else
 			if not isPauseMenuActive() and not sampIsDialogActive() and not sampIsScoreboardOpen() and not isSampfuncsConsoleActive() and sampGetChatDisplayMode() > 0 and dmg.toggle[2] then
 				local px, py, pz = getCharCoordinates(ped)
@@ -491,17 +479,17 @@ function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
 				
 				local Give_ID = targetID
 				if Give_ID == Give_PreviousID then 
-					Give_StackedDamage = Give_StackedDamage + damage
+					give_StackedDamage = give_StackedDamage + damage
 				else
-					Give_PreviousID = Give_ID
-					Give_PreviousDamage = damage
-					Give_StackedDamage = Give_PreviousDamage
+					give_PreviousID = Give_ID
+					give_PreviousDamage = damage
+					give_StackedDamage = give_PreviousDamage
 				end
 				
 				local tbl = {
 					["color"] = dmg.color[1],
 					["damage"] = math.floor(damage),
-					["stacked"] = math.floor(Give_StackedDamage),
+					["stacked"] = math.floor(give_StackedDamage),
 					["time"] = os.time() + dmg.time[1],
 					["pos"] = {
 						x = px,
@@ -509,7 +497,7 @@ function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
 						z = pz
 					}
 				}
-				table.insert(giveDamage, tbl);
+				table.insert(give_Damage, tbl);
 				playsound(1)
 			end
 		end
@@ -522,18 +510,18 @@ function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
 			local px, py, pz = getCharCoordinates(ped)
 			
 			local Take_ID = senderID
-			if Take_ID == Take_PreviousID then 
-				Take_StackedDamage = Take_StackedDamage + damage
+			if Take_ID == take_PreviousID then 
+				take_StackedDamage = take_StackedDamage + damage
 			else
-				Take_PreviousID = Take_ID
-				Take_PreviousDamage = damage
-				Take_StackedDamage = Take_PreviousDamage
+				take_PreviousID = Take_ID
+				take_PreviousDamage = damage
+				take_StackedDamage = take_PreviousDamage
 			end
 			
 			local tbl = {
 				["color"] = dmg.color[2],
 				["damage"] = math.floor(damage),
-				["stacked"] = math.floor(Take_StackedDamage),
+				["stacked"] = math.floor(take_StackedDamage),
 				["time"] = os.time() + dmg.time[2],
 				["pos"] = {
 					x = px,
@@ -541,7 +529,7 @@ function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
 					z = pz
 				}
 			}
-			table.insert(takeDamage, tbl);
+			table.insert(take_Damage, tbl);
 			playsound(2)
 		end
 	end
@@ -561,6 +549,17 @@ function sampev.onPlayerDeathNotification(killerid, killedid, reason)
 			end
 		end
 	end
+end
+
+function onWindowMessage(msg, wparam, lparam)
+    if wparam == VK_ESCAPE and main_window_state[0] then
+        if msg == wm.WM_KEYDOWN then
+            consumeWindowMessage(true, false)
+        end
+        if msg == wm.WM_KEYUP then
+            main_window_state[0] = false
+        end
+    end
 end
 
 function playsound(id)
@@ -702,38 +701,14 @@ end
 function sounds_script()
 	local url = 'https://raw.githubusercontent.com/akacross/dmginfo/main/resource/audio/dmginfo/'
 	local file_path = getWorkingDirectory() .. "/resource/audio/dmginfo/"
-	
-	for i = 1, 8 do
-		if not doesFileExist(file_path.. 'sound'..i..'.mp3') then
-			downloadUrlToFile(url .. 'sound'..i..'.mp3', file_path .. 'sound'..i..'.mp3', function(id, status)
+	local sounds = {"sound1.mp3", "sound2.mp3", "sound3.mp3", "sound4.mp3", "sound5.mp3", "sound6.mp3", "sound7.mp3", "sound8.mp3", "roblox.mp3", "mw2.mp3", "bingbong.mp3"}
+	for k, v in pairs(sounds) do
+		if not doesFileExist(file_path .. v) then
+			downloadUrlToFile(url .. v, file_path .. v, function(id, status)
 				if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-					print('sound'..i..'.mp3'..' Downloaded')
+					print(v .. ' Downloaded')
 				end
 			end)
 		end
-	end
-	
-	if not doesFileExist(file_path.. 'bingbong.mp3') then
-		downloadUrlToFile(url .. 'bingbong.mp3', file_path .. 'bingbong.mp3', function(id, status)
-			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-				print('bingbong.mp3'..' Downloaded')
-			end
-		end)
-	end
-	
-	if not doesFileExist(file_path.. 'mw2.mp3') then
-		downloadUrlToFile(url .. 'mw2.mp3', file_path .. 'mw2.mp3', function(id, status)
-			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-				print('mw2.mp3'..' Downloaded')
-			end
-		end)
-	end
-		
-	if not doesFileExist(file_path.. 'roblox.mp3') then
-		downloadUrlToFile(url .. 'roblox.mp3', file_path .. 'roblox.mp3', function(id, status)
-			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-				print('roblox.mp3'..' Downloaded')
-			end
-		end)
 	end
 end
