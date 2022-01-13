@@ -7,8 +7,8 @@ local script_version = 1.4
 if getMoonloaderVersion() >= 27 then
 	require 'libstd.deps' {
 	   'fyp:mimgui',
+	   'fyp:samp-lua', 
 	   'fyp:fa-icons-4',
-	   --'donhomka:mimgui-addons',
 	   'donhomka:extensions-lite'
 	}
 end
@@ -26,17 +26,16 @@ encoding.default = 'CP1251'
 local u8 = encoding.UTF8
 local lfs = require 'lfs'
 local wm = require 'lib.windows.message'
---local mimgui_addons = require 'mimgui_addons'
 local faicons = require 'fa-icons'
 local ti = require 'tabler_icons'
 local ped, h = playerPed, playerHandle
 local sampev = require 'lib.samp.events'
 local flag = require ('moonloader').font_flag
-local path = getWorkingDirectory() .. '\\config\\'
-local cfg = path .. 'dmginfo.ini'
 local dlstatus = require('moonloader').download_status
 local https = require 'ssl.https'
-local audiopath = getGameDirectory() .. "\\moonloader\\resource\\audio\\dmginfo"
+local path = getWorkingDirectory() .. '\\config\\'
+local cfg = path .. 'dmginfo.ini'
+local audiopath = getWorkingDirectory() .. "\\resource\\audio\\dmginfo"
 local script_path = thisScript().path
 local script_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.lua"
 local update_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.txt"
