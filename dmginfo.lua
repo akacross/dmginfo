@@ -100,20 +100,19 @@ function main()
 	blank = table.deepcopy(dmg)
 	if not doesDirectoryExist(path) then createDirectory(path) end
 	if doesFileExist(cfg) then loadIni() else blankIni() end
-
 	repeat wait(0) until isSampAvailable()
 	repeat wait(0) until sampGetGamestate() == 3
-	
 	if dmg.autoupdate then
 		update_script()
 	end
-
+	sounds_script()
+	
 	paths = scanGameFolder(audiopath, paths)
-
+	
 	for i = 1, 2 do
 		createfont(i)
 	end
-
+	
 	sampRegisterChatCommand("dmg", function() 
 		if not update then
 			main_window_state[0] = not main_window_state[0] 
@@ -693,6 +692,45 @@ function update_script()
 				message("UpdateSuccessful")
 				blankIni()
 				update = true
+			end
+		end)
+	end
+end
+
+function sounds_script()
+	local url = 'https://raw.githubusercontent.com/akacross/dmginfo/main/resource/audio/dmginfo/'
+	local file_path = getWorkingDirectory() .. "/resource/audio/dmginfo/"
+	
+	for i = 1, 8 do
+		if not doesFileExist(file_path.. 'sound'..i..'.mp3') then
+			downloadUrlToFile(url .. 'sound'..i..'.mp3', file_path .. 'sound'..i..'.mp3', function(id, status)
+				if status == dlstatus.STATUS_ENDDOWNLOADDATA then
+					print('sound'..i..'.mp3'..' Downloaded')
+				end
+			end)
+		end
+	end
+	
+	if not doesFileExist(file_path.. 'bingbong.mp3') then
+		downloadUrlToFile(url .. 'bingbong.mp3', file_path .. 'bingbong.mp3', function(id, status)
+			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
+				print('bingbong.mp3'..' Downloaded')
+			end
+		end)
+	end
+	
+	if not doesFileExist(file_path.. 'mw2.mp3') then
+		downloadUrlToFile(url .. 'mw2.mp3', file_path .. 'mw2.mp3', function(id, status)
+			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
+				print('mw2.mp3'..' Downloaded')
+			end
+		end)
+	end
+		
+	if not doesFileExist(file_path.. 'roblox.mp3') then
+		downloadUrlToFile(url .. 'roblox.mp3', file_path .. 'roblox.mp3', function(id, status)
+			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
+				print('roblox.mp3'..' Downloaded')
 			end
 		end)
 	end
