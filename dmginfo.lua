@@ -33,9 +33,9 @@ local sampev = require 'lib.samp.events'
 local flag = require ('moonloader').font_flag
 local dlstatus = require('moonloader').download_status
 local https = require 'ssl.https'
-local path = getWorkingDirectory() .. '\\config\\'
+local path = getWorkingDirectory() .. '/config/'
 local cfg = path .. 'dmginfo.ini'
-local audiopath = getWorkingDirectory() .. "\\resource\\audio\\dmginfo"
+local audiopath = getWorkingDirectory() .. "/resource/audio/dmginfo"
 local script_path = thisScript().path
 local script_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.lua"
 local update_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.txt"
@@ -98,12 +98,15 @@ local Take_PreviousDamage = 0
 function main()
 	blank = table.deepcopy(dmg)
 	if not doesDirectoryExist(path) then createDirectory(path) end
+	if not doesDirectoryExist(audiopath) then createDirectory(audiopath) end
 	if doesFileExist(cfg) then loadIni() else blankIni() end
 	repeat wait(0) until isSampAvailable()
 	repeat wait(0) until sampGetGamestate() == 3
+	
 	if dmg.autoupdate then
 		update_script()
 	end
+	
 	sounds_script()
 	
 	paths = scanGameFolder(audiopath, paths)
