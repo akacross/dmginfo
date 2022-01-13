@@ -296,7 +296,6 @@ function()
 							imgui.SetTooltip('Change the font')
 						end
 						
-						
 						imgui.SameLine()
 						local choices2 = {'Bold', 'Italics', 'Border', 'Shadow'}
 						imgui.PushItemWidth(60)
@@ -326,7 +325,6 @@ function()
 						end
 						
 						imgui.SameLine()
-						
 						if imgui.Checkbox('Stacked##'..i, new.bool(dmg.stacked[i])) then 
 							dmg.stacked[i] = not dmg.stacked[i] 
 						end  
@@ -334,36 +332,51 @@ function()
 						if imgui.IsItemHovered() then
 							imgui.SetTooltip('Stacked Damage Per-Player')
 						end
-						
-						local textsize = new.int(dmg.fontsize[i])
-						imgui.PushItemWidth(70)
-						if imgui.InputInt('Fontsize##'..i, textsize, 1, 100) then
-							if textsize[0] >= 4 then
-								if textsize[0] <= 72 then
-									dmg.fontsize[i] = textsize[0]
-								end
+
+						imgui.BeginGroup()
+							if imgui.Button('+##'..i) and dmg.fontsize[i] < 72 then
+								dmg.fontsize[i] = dmg.fontsize[i] + 1
+								createfont(i)
 							end
-						end 
-						imgui.PopItemWidth()
+
+							imgui.SameLine()
+							imgui.Text(tostring(dmg.fontsize[i]))
+							imgui.SameLine()
+
+							if imgui.Button('-##'..i) and dmg.fontsize[i] > 4 then
+								dmg.fontsize[i] = dmg.fontsize[i] - 1
+								createfont(i)
+							end
+						imgui.EndGroup()
 						if imgui.IsItemHovered() then
 							imgui.SetTooltip('Size of text')
 						end
+						
 						imgui.SameLine()
-						local texttime = new.int(dmg.time[i])
-						imgui.PushItemWidth(70)
-						if imgui.InputInt('Time##2'..i, texttime, 1, 100) then
-							if texttime[0] >= 1 then
-								if texttime[0] <= 10 then
-									dmg.time[i] = texttime[0]
-								end
+						imgui.Text('Fontsize') 
+
+						imgui.SameLine()
+						imgui.BeginGroup()
+							if imgui.Button('+##2'..i) and dmg.time[i] < 10 then
+								dmg.time[i] = dmg.time[i] + 1
+								createfont(i)
 							end
-						end 
-						imgui.PopItemWidth()
-						
-						
+
+							imgui.SameLine()
+							imgui.Text(tostring(dmg.time[i]))
+							imgui.SameLine()
+
+							if imgui.Button('-##2'..i) and dmg.time[i] > 1 then
+								dmg.time[i] = dmg.time[i] - 1
+								createfont(i)
+							end
+						imgui.EndGroup()
 						if imgui.IsItemHovered() then
 							imgui.SetTooltip('Displayed time')
 						end
+						
+						imgui.SameLine()
+						imgui.Text('Time') 
 						
 						sound_dropdownmenu(i)
 					else
@@ -564,7 +577,6 @@ function message(id)
 		{"ERROR", "Error missing sound file"},
 		{"UpdateInProgress", "The update is in progress.. Please wait.."},
 		{"CheckingforUpdates", "Checking for updates!"},
-		{"NoUpdatesFound", "No Updates were found"},
 		{"NewUpdate", "New version found! The update is in progress.."},
 		{"UpdateSuccessful", "The update was successful!"},
 	}
@@ -683,7 +695,5 @@ function update_script()
 				update = true
 			end
 		end)
-	else
-		message('NoUpdatesFound')
 	end
 end
