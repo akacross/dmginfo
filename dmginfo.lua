@@ -577,9 +577,8 @@ function message(id)
 	local messages = {
 		{"ERROR", "Error missing sound file"},
 		{"UpdateInProgress", "The update is in progress.. Please wait.."},
-		{"CheckingforUpdates", "Checking for updates!"},
 		{"NewUpdate", "New version found! The update is in progress.."},
-		{"UpdateSuccessful", "The update was successful!"},
+		{"UpdateSuccessful", "The update was successful!"}
 	}
 	for k, v in pairs(messages) do
 		if id == v[1] then
