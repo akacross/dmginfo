@@ -39,6 +39,7 @@ local cfg = path .. 'dmginfo.ini'
 local script_path = thisScript().path
 local script_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.lua"
 local update_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.txt"
+local sounds_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/resource/audio/dmginfo/"
 
 local function loadIconicFont(fontSize)
     local config = imgui.ImFontConfig()
@@ -477,11 +478,11 @@ function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
 			if result then
 				local px, py, pz = getCharCoordinates(playerhandle)
 				
-				local Give_ID = targetID
-				if Give_ID == Give_PreviousID then 
+				local give_ID = targetID
+				if give_ID == give_PreviousID then 
 					give_StackedDamage = give_StackedDamage + damage
 				else
-					give_PreviousID = Give_ID
+					give_PreviousID = give_ID
 					give_PreviousDamage = damage
 					give_StackedDamage = give_PreviousDamage
 				end
@@ -509,11 +510,11 @@ function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
 		if dmg.toggle[2] then
 			local px, py, pz = getCharCoordinates(ped)
 			
-			local Take_ID = senderID
-			if Take_ID == take_PreviousID then 
+			local take_ID = senderID
+			if take_ID == take_PreviousID then 
 				take_StackedDamage = take_StackedDamage + damage
 			else
-				take_PreviousID = Take_ID
+				take_PreviousID = take_ID
 				take_PreviousDamage = damage
 				take_StackedDamage = take_PreviousDamage
 			end
@@ -699,12 +700,10 @@ function update_script()
 end
 
 function sounds_script()
-	local url = 'https://raw.githubusercontent.com/akacross/dmginfo/main/resource/audio/dmginfo/'
-	local file_path = getWorkingDirectory() .. "/resource/audio/dmginfo/"
 	local sounds = {"sound1.mp3", "sound2.mp3", "sound3.mp3", "sound4.mp3", "sound5.mp3", "sound6.mp3", "sound7.mp3", "sound8.mp3", "roblox.mp3", "mw2.mp3", "bingbong.mp3"}
 	for k, v in pairs(sounds) do
-		if not doesFileExist(file_path .. v) then
-			downloadUrlToFile(url .. v, file_path .. v, function(id, status)
+		if not doesFileExist(audiopath .. v) then
+			downloadUrlToFile(sounds_url .. v, audiopath .. v, function(id, status)
 				if status == dlstatus.STATUS_ENDDOWNLOADDATA then
 					print(v .. ' Downloaded')
 				end
