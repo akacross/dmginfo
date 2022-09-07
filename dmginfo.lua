@@ -9,7 +9,8 @@ if getMoonloaderVersion() >= 27 then
 	   'fyp:mimgui',
 	   'fyp:samp-lua', 
 	   'fyp:fa-icons-4',
-	   'donhomka:extensions-lite'
+	   'donhomka:extensions-lite',
+	   'hisham:LuaFileSystem'
 	}
 end
 
@@ -28,6 +29,7 @@ local lfs = require 'lfs'
 local wm = require 'lib.windows.message'
 local faicons = require 'fa-icons'
 local ti = require 'tabler_icons'
+local fa = require 'fAwesome5'
 local ped, h = playerPed, playerHandle
 local sampev = require 'lib.samp.events'
 local flag = require ('moonloader').font_flag
@@ -40,14 +42,6 @@ local script_path = thisScript().path
 local script_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.lua"
 local update_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.txt"
 local sounds_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/resource/audio/dmginfo/"
-
-local function loadIconicFont(fontSize)
-    local config = imgui.ImFontConfig()
-    config.MergeMode = true
-    config.PixelSnapH = true
-    local iconRanges = imgui.new.ImWchar[3](ti.min_range, ti.max_range, 0)
-    imgui.GetIO().Fonts:AddFontFromMemoryCompressedBase85TTF(ti.get_font_data_base85(), fontSize, config, iconRanges)
-end
 
 local blank = {}
 local dmg = {
@@ -69,10 +63,10 @@ local dmg = {
 			"sound4.mp3"
 		},
 		paths = {
-			audiopath .. "\\sound1.mp3",
-			audiopath .. "\\sound2.mp3",
-			audiopath .. "\\sound3.mp3",
-			audiopath .. "\\sound4.mp3"
+			audiopath .. "sound1.mp3",
+			audiopath .. "sound2.mp3",
+			audiopath .. "sound3.mp3",
+			audiopath .. "sound4.mp3"
 		},
 		volumes = {
 			0.10,
@@ -130,91 +124,32 @@ function main()
 			lua_thread.create(function() 
 				wait(20000) 
 				thisScript():reload()
+				blankIni()
 				update = false
 			end)
 		end
 	end
 end
 
-function apply_custom_style()
-   local style = imgui.GetStyle()
-   local colors = style.Colors
-   local clr = imgui.Col
-   local ImVec4 = imgui.ImVec4
-   style.WindowRounding = 1.5
-   style.WindowTitleAlign = imgui.ImVec2(0.5, 0.5)
-   style.FrameRounding = 1.0
-   style.ItemSpacing = imgui.ImVec2(4.0, 4.0)
-   style.ScrollbarSize = 13.0
-   style.ScrollbarRounding = 0
-   style.GrabMinSize = 8.0
-   style.GrabRounding = 1.0
-   style.WindowBorderSize = 0.0
-   style.WindowPadding = imgui.ImVec2(4.0, 4.0)
-   style.FramePadding = imgui.ImVec2(2.5, 3.5)
-   style.ButtonTextAlign = imgui.ImVec2(0.5, 0.35)
-
-   colors[clr.Text]                   = ImVec4(1.00, 1.00, 1.00, 1.00)
-   colors[clr.TextDisabled]           = ImVec4(0.7, 0.7, 0.7, 1.0)
-   colors[clr.WindowBg]               = ImVec4(0.07, 0.07, 0.07, 1.0)
-   colors[clr.PopupBg]                = ImVec4(0.08, 0.08, 0.08, 0.94)
-   colors[clr.Border]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.4)
-   colors[clr.BorderShadow]           = ImVec4(0.00, 0.00, 0.00, 0.00)
-   colors[clr.FrameBg]                = ImVec4(mainc.x, mainc.y, mainc.z, 0.7)
-   colors[clr.FrameBgHovered]         = ImVec4(mainc.x, mainc.y, mainc.z, 0.4)
-   colors[clr.FrameBgActive]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.9)
-   colors[clr.TitleBg]                = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
-   colors[clr.TitleBgActive]          = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
-   colors[clr.TitleBgCollapsed]       = ImVec4(mainc.x, mainc.y, mainc.z, 0.79)
-   colors[clr.MenuBarBg]              = ImVec4(0.14, 0.14, 0.14, 1.00)
-   colors[clr.ScrollbarBg]            = ImVec4(0.02, 0.02, 0.02, 0.53)
-   colors[clr.ScrollbarGrab]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
-   colors[clr.ScrollbarGrabHovered]   = ImVec4(0.41, 0.41, 0.41, 1.00)
-   colors[clr.ScrollbarGrabActive]    = ImVec4(0.51, 0.51, 0.51, 1.00)
-   colors[clr.CheckMark]              = ImVec4(mainc.x + 0.13, mainc.y + 0.13, mainc.z + 0.13, 1.00)
-   colors[clr.SliderGrab]             = ImVec4(0.28, 0.28, 0.28, 1.00)
-   colors[clr.SliderGrabActive]       = ImVec4(0.35, 0.35, 0.35, 1.00)
-   colors[clr.Button]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
-   colors[clr.ButtonHovered]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
-   colors[clr.ButtonActive]           = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
-   colors[clr.Header]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.6)
-   colors[clr.HeaderHovered]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.43)
-   colors[clr.HeaderActive]           = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
-   colors[clr.Separator]              = colors[clr.Border]
-   colors[clr.SeparatorHovered]       = ImVec4(0.26, 0.59, 0.98, 0.78)
-   colors[clr.SeparatorActive]        = ImVec4(0.26, 0.59, 0.98, 1.00)
-   colors[clr.ResizeGrip]             = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
-   colors[clr.ResizeGripHovered]      = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
-   colors[clr.ResizeGripActive]       = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
-   colors[clr.PlotLines]              = ImVec4(0.61, 0.61, 0.61, 1.00)
-   colors[clr.PlotLinesHovered]       = ImVec4(1.00, 0.43, 0.35, 1.00)
-   colors[clr.PlotHistogram]          = ImVec4(0.90, 0.70, 0.00, 1.00)
-   colors[clr.PlotHistogramHovered]   = ImVec4(1.00, 0.60, 0.00, 1.00)
-   colors[clr.TextSelectedBg]         = ImVec4(0.26, 0.59, 0.98, 0.35)
+local function loadIconicFont(fromfile, fontSize, min, max, fontdata)
+    local config = imgui.ImFontConfig()
+    config.MergeMode = true
+    config.PixelSnapH = true
+    local iconRanges = new.ImWchar[3](min, max, 0)
+	if fromfile then
+		imgui.GetIO().Fonts:AddFontFromFileTTF(fontdata, fontSize, config, iconRanges)
+	else
+		imgui.GetIO().Fonts:AddFontFromMemoryCompressedBase85TTF(fontdata, fontSize, config, iconRanges)
+	end
 end
 
--- imgui.OnInitialize() called only once, before the first render
 imgui.OnInitialize(function()
 	apply_custom_style() -- apply custom style
-	local defGlyph = imgui.GetIO().Fonts.ConfigData.Data[0].GlyphRanges
-	imgui.GetIO().Fonts:Clear() -- clear the fonts
-	local font_config = imgui.ImFontConfig() -- each font has its own config
-	font_config.SizePixels = 14.0;
-	font_config.GlyphExtraSpacing.x = 0.1
-	-- main font
-	local def = imgui.GetIO().Fonts:AddFontFromFileTTF(getFolderPath(0x14) .. '\\arialbd.ttf', font_config.SizePixels, font_config, defGlyph)
 
-	local config = imgui.ImFontConfig()
-	config.MergeMode = true
-	config.PixelSnapH = true
-	config.FontDataOwnedByAtlas = false
-	config.GlyphOffset.y = 1.0 -- offset 1 pixel from down
-	local fa_glyph_ranges = new.ImWchar[3]({ faicons.min_range, faicons.max_range, 0 })
-	-- icons
-	local faicon = imgui.GetIO().Fonts:AddFontFromMemoryCompressedBase85TTF(faicons.get_font_data_base85(), font_config.SizePixels, config, fa_glyph_ranges)
-
-	loadIconicFont(14)
-
+	loadIconicFont(false, 14.0, faicons.min_range, faicons.max_range, faicons.get_font_data_base85())
+	loadIconicFont(true, 14.0, fa.min_range, fa.max_range, 'moonloader/resource/fonts/fa-solid-900.ttf')
+	loadIconicFont(false, 14.0, ti.min_range, ti.max_range, ti.get_font_data_base85())
+	
 	imgui.GetIO().ConfigWindowsMoveFromTitleBarOnly = true
 	imgui.GetIO().IniFilename = nil
 end)
@@ -540,14 +475,10 @@ function sampev.onPlayerDeathNotification(killerid, killedid, reason)
 	local res, id = sampGetPlayerIdByCharHandle(PLAYER_PED)
 	if res then
 		if killerid == id then
-			if dmg.audio.toggle[3] then
-				playsound(3)
-			end
+			playsound(3)
 		end
 		if killedid == id then
-			if dmg.audio.toggle[4] then
-				playsound(4)
-			end
+			playsound(4)
 		end
 	end
 end
@@ -564,12 +495,14 @@ function onWindowMessage(msg, wparam, lparam)
 end
 
 function playsound(id)
-	if doesFileExist(dmg.audio.paths[id]) then
-		sound_death = loadAudioStream(dmg.audio.paths[id])
-		setAudioStreamVolume(sound_death, dmg.audio.volumes[id])
-		setAudioStreamState(sound_death, 1)
-	else
-		message('ERROR')
+	if dmg.audio.toggle[id] then
+		if doesFileExist(dmg.audio.paths[id]) then
+			sound_death = loadAudioStream(dmg.audio.paths[id])
+			setAudioStreamVolume(sound_death, dmg.audio.volumes[id])
+			setAudioStreamState(sound_death, 1)
+		else
+			message('ERROR')
+		end
 	end
 end
 
@@ -668,7 +601,8 @@ end
 function scanGameFolder(path, tables)
     for file in lfs.dir(path) do
         if file ~= "." and file ~= ".." then
-            local f = path..'\\'..file
+            --local f = path..'\\'..file
+			local f = path..file
 			local file_extension = string.match(file, "([^\\%.]+)$") -- Avoids double "extension" file names from being included and seen as "audiofile"
             if file_extension:match("mp3") or file_extension:match("mp4") or file_extension:match("wav") or file_extension:match("m4a") or file_extension:match("flac") or file_extension:match("m4r") or file_extension:match("ogg")
 			or file_extension:match("mp2") or file_extension:match("amr") or file_extension:match("wma") or file_extension:match("aac") or file_extension:match("aiff") then
@@ -691,7 +625,6 @@ function update_script()
 		downloadUrlToFile(script_url, script_path, function(id, status)
 			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
 				message("UpdateSuccessful")
-				blankIni()
 				update = true
 			end
 		end)
@@ -709,4 +642,61 @@ function sounds_script()
 			end)
 		end
 	end
+end
+
+function apply_custom_style()
+   local style = imgui.GetStyle()
+   local colors = style.Colors
+   local clr = imgui.Col
+   local ImVec4 = imgui.ImVec4
+   style.WindowRounding = 1.5
+   style.WindowTitleAlign = imgui.ImVec2(0.5, 0.5)
+   style.FrameRounding = 1.0
+   style.ItemSpacing = imgui.ImVec2(4.0, 4.0)
+   style.ScrollbarSize = 13.0
+   style.ScrollbarRounding = 0
+   style.GrabMinSize = 8.0
+   style.GrabRounding = 1.0
+   style.WindowBorderSize = 0.0
+   style.WindowPadding = imgui.ImVec2(4.0, 4.0)
+   style.FramePadding = imgui.ImVec2(2.5, 3.5)
+   style.ButtonTextAlign = imgui.ImVec2(0.5, 0.35)
+
+   colors[clr.Text]                   = ImVec4(1.00, 1.00, 1.00, 1.00)
+   colors[clr.TextDisabled]           = ImVec4(0.7, 0.7, 0.7, 1.0)
+   colors[clr.WindowBg]               = ImVec4(0.07, 0.07, 0.07, 1.0)
+   colors[clr.PopupBg]                = ImVec4(0.08, 0.08, 0.08, 0.94)
+   colors[clr.Border]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.4)
+   colors[clr.BorderShadow]           = ImVec4(0.00, 0.00, 0.00, 0.00)
+   colors[clr.FrameBg]                = ImVec4(mainc.x, mainc.y, mainc.z, 0.7)
+   colors[clr.FrameBgHovered]         = ImVec4(mainc.x, mainc.y, mainc.z, 0.4)
+   colors[clr.FrameBgActive]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.9)
+   colors[clr.TitleBg]                = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
+   colors[clr.TitleBgActive]          = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
+   colors[clr.TitleBgCollapsed]       = ImVec4(mainc.x, mainc.y, mainc.z, 0.79)
+   colors[clr.MenuBarBg]              = ImVec4(0.14, 0.14, 0.14, 1.00)
+   colors[clr.ScrollbarBg]            = ImVec4(0.02, 0.02, 0.02, 0.53)
+   colors[clr.ScrollbarGrab]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+   colors[clr.ScrollbarGrabHovered]   = ImVec4(0.41, 0.41, 0.41, 1.00)
+   colors[clr.ScrollbarGrabActive]    = ImVec4(0.51, 0.51, 0.51, 1.00)
+   colors[clr.CheckMark]              = ImVec4(mainc.x + 0.13, mainc.y + 0.13, mainc.z + 0.13, 1.00)
+   colors[clr.SliderGrab]             = ImVec4(0.28, 0.28, 0.28, 1.00)
+   colors[clr.SliderGrabActive]       = ImVec4(0.35, 0.35, 0.35, 1.00)
+   colors[clr.Button]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+   colors[clr.ButtonHovered]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
+   colors[clr.ButtonActive]           = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
+   colors[clr.Header]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.6)
+   colors[clr.HeaderHovered]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.43)
+   colors[clr.HeaderActive]           = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+   colors[clr.Separator]              = colors[clr.Border]
+   colors[clr.SeparatorHovered]       = ImVec4(0.26, 0.59, 0.98, 0.78)
+   colors[clr.SeparatorActive]        = ImVec4(0.26, 0.59, 0.98, 1.00)
+   colors[clr.ResizeGrip]             = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+   colors[clr.ResizeGripHovered]      = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
+   colors[clr.ResizeGripActive]       = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
+   colors[clr.PlotLines]              = ImVec4(0.61, 0.61, 0.61, 1.00)
+   colors[clr.PlotLinesHovered]       = ImVec4(1.00, 0.43, 0.35, 1.00)
+   colors[clr.PlotHistogram]          = ImVec4(0.90, 0.70, 0.00, 1.00)
+   colors[clr.PlotHistogramHovered]   = ImVec4(1.00, 0.60, 0.00, 1.00)
+   colors[clr.TextSelectedBg]         = ImVec4(0.26, 0.59, 0.98, 0.35)
 end
