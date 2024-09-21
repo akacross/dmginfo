@@ -1,523 +1,591 @@
-script_name("Dmginfo")
+script_name("dmginfo")
 script_author("akacross")
 script_url("https://akacross.net/")
 
-local script_version = 1.5
+local script_version = 1.8
+local script_version_text = "1.8.02"
 
-if getMoonloaderVersion() >= 27 then
-	require 'libstd.deps' {
-	   'fyp:mimgui',
-	   'fyp:samp-lua', 
-	   'fyp:fa-icons-4',
-	   'donhomka:extensions-lite',
-	   'hisham:LuaFileSystem'
-	}
+-- Dependency Manager
+local function safeRequire(module)
+    local success, result = pcall(require, module)
+    return success and result or nil, result
 end
 
-require"lib.moonloader"
-require"lib.sampfuncs"
-require"extensions-lite"
-
-local imgui, ffi = require 'mimgui', require 'ffi'
-local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
-local vk = require 'vkeys'
-local mem = require 'memory'
-local encoding = require 'encoding'
-encoding.default = 'CP1251'
-local u8 = encoding.UTF8
-local lfs = require 'lfs'
-local wm = require 'lib.windows.message'
-local faicons = require 'fa-icons'
-local ti = require 'tabler_icons'
-local fa = require 'fAwesome5'
-local ped, h = playerPed, playerHandle
-local sampev = require 'lib.samp.events'
-local flag = require ('moonloader').font_flag
-local dlstatus = require('moonloader').download_status
-local https = require 'ssl.https'
-local path = getWorkingDirectory() .. '/config/'
-local audiopath =  getWorkingDirectory() .. "/resource/audio/dmginfo/"
-local cfg = path .. 'dmginfo.ini'
-local script_path = thisScript().path
-local script_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.lua"
-local update_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/dmginfo.txt"
-local sounds_url = "https://raw.githubusercontent.com/akacross/dmginfo/main/resource/audio/dmginfo/"
-
-local blank = {}
-local dmg = {
-	toggle = {true,true},
-	autosave = false,
-	autoupdate = false,
-	stacked = {true, true},
-	font = {'Aerial','Aerial'},
-	fontsize = {12,12},
-	fontflag = {{true, false, true, true},{true, false, true, true}},
-	color = {-1, -1},
-	time = {3, 3},
-	audio = {
-		toggle = {true,true,false,false},
-		sounds = {
-			"sound1.mp3",
-			"sound2.mp3",
-			"sound3.mp3",
-			"sound4.mp3"
-		},
-		paths = {
-			audiopath .. "sound1.mp3",
-			audiopath .. "sound2.mp3",
-			audiopath .. "sound3.mp3",
-			audiopath .. "sound4.mp3"
-		},
-		volumes = {
-			0.10,
-			0.10,
-			0.10,
-			0.10,
-		}
-	},
+-- Requirements
+local dependencies = {
+    {name = 'moonloader', var = 'moonloader', extras = {dlstatus = 'download_status', flag = 'font_flag'}},
+    {name = 'ffi', var = 'ffi'},
+	{name = 'lfs', var = 'lfs'},
+	{name = 'ssl.https', var = 'https'},
+    {name = 'windows.message', var = 'wm'},
+    {name = 'mimgui', var = 'imgui'},
+    {name = 'encoding', var = 'encoding'},
+    {name = 'samp.events', var = 'sampev'},
+    {name = 'fAwesome6', var = 'fa'}
 }
-local main_window_state = new.bool(false)
-local mainc = imgui.ImVec4(0.92, 0.27, 0.92, 1.0)
-local update = false
-local fontid = {}
-local paths = {}
-local give_Damage = {}
-local give_StackedDamage = 0
-local give_PreviousID = 0
-local give_PreviousDamage = 0
-local take_Damage = {}
-local take_StackedDamage = 0
-local take_PreviousID = 0
-local take_PreviousDamage = 0
 
-function main()
-	blank = table.deepcopy(dmg)
-	if not doesDirectoryExist(path) then createDirectory(path) end
-	if not doesDirectoryExist(audiopath) then createDirectory(audiopath) end
-	if doesFileExist(cfg) then loadIni() else blankIni() end
-	repeat wait(0) until isSampAvailable()
-	repeat wait(0) until sampGetGamestate() == 3
-	
-	if dmg.autoupdate then
-		update_script()
-	end
-	
-	sounds_script()
-	
-	paths = scanGameFolder(audiopath, paths)
-	
-	for i = 1, 2 do
-		createfont(i)
-	end
-	
-	sampRegisterChatCommand("dmg", function() 
-		if not update then
-			main_window_state[0] = not main_window_state[0] 
-		else
-			message('UpdateInProgress')
-		end
-	end)
-	
-	while true do wait(0)
-		if update then
-			main_window_state[0] = false
-			lua_thread.create(function() 
-				wait(20000) 
-				thisScript():reload()
-				blankIni()
-				update = false
-			end)
-		end
-	end
+local loadedModules, statusMessages = {}, {success = {}, failed = {}}
+for _, dep in ipairs(dependencies) do
+    local loadedModule, errorMsg = safeRequire(dep.name)
+    loadedModules[dep.var] = loadedModule
+    table.insert(statusMessages[loadedModule and "success" or "failed"], loadedModule and dep.name or string.format("%s (%s)", dep.name, errorMsg))
 end
 
-local function loadIconicFont(fromfile, fontSize, min, max, fontdata)
-    local config = imgui.ImFontConfig()
-    config.MergeMode = true
-    config.PixelSnapH = true
-    local iconRanges = new.ImWchar[3](min, max, 0)
-	if fromfile then
-		imgui.GetIO().Fonts:AddFontFromFileTTF(fontdata, fontSize, config, iconRanges)
-	else
-		imgui.GetIO().Fonts:AddFontFromMemoryCompressedBase85TTF(fontdata, fontSize, config, iconRanges)
-	end
+-- Assign loaded modules to local variables
+for var, module in pairs(loadedModules) do
+    _G[var] = module
 end
 
-imgui.OnInitialize(function()
-	apply_custom_style() -- apply custom style
-
-	loadIconicFont(false, 14.0, faicons.min_range, faicons.max_range, faicons.get_font_data_base85())
-	loadIconicFont(true, 14.0, fa.min_range, fa.max_range, 'moonloader/resource/fonts/fa-solid-900.ttf')
-	loadIconicFont(false, 14.0, ti.min_range, ti.max_range, ti.get_font_data_base85())
-	
-	imgui.GetIO().ConfigWindowsMoveFromTitleBarOnly = true
-	imgui.GetIO().IniFilename = nil
-end)
-
-imgui.OnFrame(function() return main_window_state[0] end,
-function()
-	local width, height = getScreenResolution()
-	imgui.SetNextWindowPos(imgui.ImVec2(width / 2, height / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-	
-	imgui.Begin(ti.ICON_SETTINGS .. string.format("%s Settings - Version: %s", script.this.name, script_version), main_window_state, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
-	
-		if imgui.Button(ti.ICON_DEVICE_FLOPPY.. 'Save') then
-			saveIni()
-		end 
-		if imgui.IsItemHovered() then
-			imgui.SetTooltip('Save the Script')
-		end
-		imgui.SameLine()
-		if imgui.Checkbox('##autosave', new.bool(dmg.autosave)) then 
-			dmg.autosave = not dmg.autosave 
-			saveIni() 
-		end
-		if imgui.IsItemHovered() then
-			imgui.SetTooltip('Autosave')
-		end
-		
-		imgui.SameLine()
-		if imgui.Button(ti.ICON_FILE_UPLOAD.. 'Load') then
-			loadIni()
-		end 
-		if imgui.IsItemHovered() then
-			imgui.SetTooltip('Reload the Script')
-		end
-		imgui.SameLine()
-		if imgui.Button(ti.ICON_ERASER .. 'Reset') then
-			blankIni()
-		end 
-		if imgui.IsItemHovered() then
-			imgui.SetTooltip('Reset the Script to default settings')
-		end
-		
-		imgui.SameLine()
-		if imgui.Button(ti.ICON_REFRESH .. 'Update') then
-			update_script()
-		end 
-		if imgui.IsItemHovered() then
-			imgui.SetTooltip('Update the script')
-		end
-		imgui.SameLine()
-		if imgui.Checkbox('##autoupdate', new.bool(dmg.autoupdate)) then 
-			dmg.autoupdate = not dmg.autoupdate 
-		end
-		if imgui.IsItemHovered() then
-			imgui.SetTooltip('Auto-Update')
-		end
-		
-		
-			local names = {'Give:', 'Take:', 'Kill:', 'Death:'}
-			for i = 1, 4 do
-				if i >= 1 and i <= 2 then
-					imgui.NewLine()	
-					imgui.SameLine(4) 
-					imgui.Text(names[i]) 
-					
-					if imgui.Checkbox('##'..i, new.bool(dmg.toggle[i])) then 
-						dmg.toggle[i] = not dmg.toggle[i]
-					end  
-					imgui.SameLine()
-				
-					
-					if dmg.toggle[i] then
-						
-						imgui.PushItemWidth(95) 
-						text = new.char[30](dmg.font[i])
-						if imgui.InputText('##font'..i, text, sizeof(text), imgui.InputTextFlags.EnterReturnsTrue) then
-							dmg.font[i] = u8:decode(str(text))
-							createfont(i)
-						end
-						imgui.PopItemWidth()
-						if imgui.IsItemHovered() then
-							imgui.SetTooltip('Change the font')
-						end
-						
-						imgui.SameLine()
-						local choices2 = {'Bold', 'Italics', 'Border', 'Shadow'}
-						imgui.PushItemWidth(60)
-						if imgui.BeginCombo("##flags"..i, 'Flags') then
-							for k = i, #choices2 do
-								if imgui.Checkbox(choices2[k], new.bool(dmg.fontflag[i][k])) then
-									dmg.fontflag[i][k] = not dmg.fontflag[i][k]
-									createfont(i)
-								end
-							end
-							imgui.EndCombo()
-						end
-						imgui.PopItemWidth()
-						
-						imgui.SameLine()	
-						imgui.PushItemWidth(95) 
-						tcolor = new.float[4](hex2rgba(dmg.color[i]))
-						if imgui.ColorEdit4('Color##'..i, tcolor, imgui.ColorEditFlags.NoInputs + imgui.ColorEditFlags.NoLabel) then 
-							dmg.color[i] = join_argb(tcolor[3] * 255, tcolor[0] * 255, tcolor[1] * 255, tcolor[2] * 255) 
-						end 
-						imgui.PopItemWidth()
-						imgui.SameLine()
-						imgui.Text('Color')
-						
-						if imgui.IsItemHovered() then
-							imgui.SetTooltip('Color of text')
-						end
-						
-						imgui.SameLine()
-						if imgui.Checkbox('Stacked##'..i, new.bool(dmg.stacked[i])) then 
-							dmg.stacked[i] = not dmg.stacked[i] 
-						end  
-						
-						if imgui.IsItemHovered() then
-							imgui.SetTooltip('Stacked Damage Per-Player')
-						end
-
-						imgui.BeginGroup()
-							if imgui.Button('+##'..i) and dmg.fontsize[i] < 72 then
-								dmg.fontsize[i] = dmg.fontsize[i] + 1
-								createfont(i)
-							end
-
-							imgui.SameLine()
-							imgui.Text(tostring(dmg.fontsize[i]))
-							imgui.SameLine()
-
-							if imgui.Button('-##'..i) and dmg.fontsize[i] > 4 then
-								dmg.fontsize[i] = dmg.fontsize[i] - 1
-								createfont(i)
-							end
-						imgui.EndGroup()
-						if imgui.IsItemHovered() then
-							imgui.SetTooltip('Size of text')
-						end
-						
-						imgui.SameLine()
-						imgui.Text('Fontsize') 
-
-						imgui.SameLine()
-						imgui.BeginGroup()
-							if imgui.Button('+##2'..i) and dmg.time[i] < 10 then
-								dmg.time[i] = dmg.time[i] + 1
-								createfont(i)
-							end
-
-							imgui.SameLine()
-							imgui.Text(tostring(dmg.time[i]))
-							imgui.SameLine()
-
-							if imgui.Button('-##2'..i) and dmg.time[i] > 1 then
-								dmg.time[i] = dmg.time[i] - 1
-								createfont(i)
-							end
-						imgui.EndGroup()
-						if imgui.IsItemHovered() then
-							imgui.SetTooltip('Displayed time')
-						end
-						
-						imgui.SameLine()
-						imgui.Text('Time') 
-						
-						sound_dropdownmenu(i)
-					else
-						imgui.Text('Disabled') 
-					end
-				end
-				
-				if i == 3 or i == 4 then	
-					imgui.NewLine()	
-					imgui.SameLine(4) 
-					imgui.Text(names[i])
-					sound_dropdownmenu(i)
-				end
-			end
-	imgui.End()
-end)
-
-function sound_dropdownmenu(i)
-	if imgui.Checkbox('##3'..i, new.bool(dmg.audio.toggle[i])) then 
-		dmg.audio.toggle[i] = not dmg.audio.toggle[i]
-	end  
-	imgui.SameLine()
-	
-	if dmg.audio.toggle[i] then
-	
-		imgui.PushItemWidth(150)
-			if imgui.BeginCombo("##sounds"..i, dmg.audio.sounds[i]) then
-				for k, v in pairs(paths) do
-					k = tostring(k)
-					if k:match(".+%.mp3") or k:match(".+%.mp4") or k:match(".+%.wav") or k:match(".+%.m4a") or k:match(".+%.flac") or k:match(".+%.m4r") or k:match(".+%.ogg") or k:match(".+%.mp2") or k:match(".+%.amr") or k:match(".+%.wma") or k:match(".+%.aac") or k:match(".+%.aiff") then
-						if imgui.Selectable(u8(k), true) then 
-							dmg.audio.sounds[i] = k
-							dmg.audio.paths[i] = v
-							playsound(i)
-						end
-					end
-				end
-				imgui.EndCombo()
-			end
-		imgui.PopItemWidth()
-		
-		imgui.SameLine()
-		
-		imgui.PushItemWidth(150)
-		local volume = new.float[1](dmg.audio.volumes[i])
-		if imgui.SliderFloat(u8'##Volume##' .. i, volume, 0, 1) then
-			dmg.audio.volumes[i] = volume[0]
-		end
-		imgui.PopItemWidth()
-		
-		if imgui.IsItemHovered() then
-			imgui.SetTooltip('Volume Control')
-		end
-		
-		
-	else
-		imgui.Text('Disabled') 
-	end
-end
-
-function onD3DPresent()
-	for k, v in pairs(give_Damage) do
-		if os.time() > v["time"] then
-			table.remove(give_Damage, k)
-		else
-			if not isPauseMenuActive() and not sampIsDialogActive() and not sampIsScoreboardOpen() and not isSampfuncsConsoleActive() and sampGetChatDisplayMode() > 0 and dmg.toggle[1] then
-				local px, py, pz = getCharCoordinates(ped)
-				local x, y, z = v["pos"].x, v["pos"].y, v["pos"].z
-				if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) and isPointOnScreen(x, y, z, 0.0) then
-					local sx, sy = convert3DCoordsToScreen(x, y, z)
-					renderFontDrawText(fontid[1], '+' .. (dmg.stacked[1] and v["stacked"] or v["damage"]), sx, sy, v["color"])
-				end
-			end
-		end
-	end
-
-	for k, v in pairs(take_Damage) do
-		if os.time() > v["time"] then
-			table.remove(take_Damage, k)
-		else
-			if not isPauseMenuActive() and not sampIsDialogActive() and not sampIsScoreboardOpen() and not isSampfuncsConsoleActive() and sampGetChatDisplayMode() > 0 and dmg.toggle[2] then
-				local px, py, pz = getCharCoordinates(ped)
-				local x, y, z = v["pos"].x, v["pos"].y, v["pos"].z
-				if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) and isPointOnScreen(x, y, z, 0.0) then
-					local sx, sy = convert3DCoordsToScreen(x, y, z)
-					renderFontDrawText(fontid[2], '-' .. (dmg.stacked[2] and v["stacked"] or v["damage"]), sx, sy, v["color"])
-				end
-			end
-		end
-	end
-end
-
-function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
-	if math.floor(damage) ~= 0 then
-		if dmg.toggle[1] then
-			local result, playerhandle = sampGetCharHandleBySampPlayerId(targetID)
-			if result then
-				local px, py, pz = getCharCoordinates(playerhandle)
-				
-				local give_ID = targetID
-				if give_ID == give_PreviousID then 
-					give_StackedDamage = give_StackedDamage + damage
-				else
-					give_PreviousID = give_ID
-					give_PreviousDamage = damage
-					give_StackedDamage = give_PreviousDamage
-				end
-				
-				local tbl = {
-					["color"] = dmg.color[1],
-					["damage"] = math.floor(damage),
-					["stacked"] = math.floor(give_StackedDamage),
-					["time"] = os.time() + dmg.time[1],
-					["pos"] = {
-						x = px,
-						y = py,
-						z = pz
-					}
-				}
-				table.insert(give_Damage, tbl);
-				playsound(1)
-			end
-		end
-	end
-end
-
-function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
-	if math.floor(damage) ~= 0 then
-		if dmg.toggle[2] then
-			local px, py, pz = getCharCoordinates(ped)
-			
-			local take_ID = senderID
-			if take_ID == take_PreviousID then 
-				take_StackedDamage = take_StackedDamage + damage
-			else
-				take_PreviousID = take_ID
-				take_PreviousDamage = damage
-				take_StackedDamage = take_PreviousDamage
-			end
-			
-			local tbl = {
-				["color"] = dmg.color[2],
-				["damage"] = math.floor(damage),
-				["stacked"] = math.floor(take_StackedDamage),
-				["time"] = os.time() + dmg.time[2],
-				["pos"] = {
-					x = px,
-					y = py,
-					z = pz
-				}
-			}
-			table.insert(take_Damage, tbl);
-			playsound(2)
-		end
-	end
-end
-
-function sampev.onPlayerDeathNotification(killerid, killedid, reason)
-	local res, id = sampGetPlayerIdByCharHandle(PLAYER_PED)
-	if res then
-		if killerid == id then
-			playsound(3)
-		end
-		if killedid == id then
-			playsound(4)
-		end
-	end
-end
-
-function onWindowMessage(msg, wparam, lparam)
-    if wparam == VK_ESCAPE and main_window_state[0] then
-        if msg == wm.WM_KEYDOWN then
-            consumeWindowMessage(true, false)
-        end
-        if msg == wm.WM_KEYUP then
-            main_window_state[0] = false
+-- Assign extra fields
+for _, dep in ipairs(dependencies) do
+    if dep.extras and loadedModules[dep.var] then
+        for extraVar, extraField in pairs(dep.extras) do
+            _G[extraVar] = loadedModules[dep.var][extraField]
         end
     end
 end
 
-function playsound(id)
-	if dmg.audio.toggle[id] then
-		if doesFileExist(dmg.audio.paths[id]) then
-			sound_death = loadAudioStream(dmg.audio.paths[id])
-			setAudioStreamVolume(sound_death, dmg.audio.volumes[id])
-			setAudioStreamState(sound_death, 1)
-		else
-			message('ERROR')
-		end
-	end
+-- Print status messages
+print("Loaded modules: " .. table.concat(statusMessages.success, ", "))
+if #statusMessages.failed > 0 then
+    print("Failed to load modules: " .. table.concat(statusMessages.failed, ", "))
 end
 
-function message(id)
-	local messages = {
-		{"ERROR", "Error missing sound file"},
-		{"UpdateInProgress", "The update is in progress.. Please wait.."},
-		{"NewUpdate", "New version found! The update is in progress.."},
-		{"UpdateSuccessful", "The update was successful!"}
-	}
-	for k, v in pairs(messages) do
-		if id == v[1] then
-			sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} %s", script.this.name, v[2]), -1)
-		end
+-- Encoding
+encoding.default = 'CP1251'
+local u8 = encoding.UTF8
+
+-- Paths
+local workingDir = getWorkingDirectory()
+local scriptName = thisScript().name
+local scriptPath = thisScript().path
+
+local configDir = workingDir .. '\\config\\'
+local resourceDir = workingDir .. '\\resource\\'
+local audioDir = resourceDir .. "audio\\"
+local audioPath =  audioDir .. scriptName .. "\\"
+local cfg = configDir .. scriptName .. '.ini'
+
+-- URLs
+local url = "https://raw.githubusercontent.com/akacross/dmginfo/main/"
+local script_url = url .. "dmginfo.lua"
+local update_url = url .. "dmginfo.txt"
+local sounds_url = url .. "resource/audio/dmginfo/"
+
+-- Libs
+local ped, h = playerPed, playerHandle
+
+local blank_dmg = {}
+local dmg = {
+    GIVE = {
+        toggle = true,
+        stacked = true,
+        font = 'Aerial',
+        fontsize = 12,
+        fontflag = { true, false, true, true },
+        color = -1,
+        time = 3,
+        audio = {
+            toggle = true,
+            sound = "sound1.mp3",
+            volume = 0.10
+        }
+    },
+    TAKE = {
+        toggle = true,
+        stacked = true,
+        font = 'Aerial',
+        fontsize = 12,
+        fontflag = { true, false, true, true },
+        color = -1,
+        time = 3,
+        audio = {
+            toggle = true,
+            sound = "sound2.mp3",
+            volume = 0.10
+        }
+    },
+    autosave = false,
+    autoupdate = false
+}
+
+local fontid = {}
+
+-- Damage Data Structure
+local damageData = {
+    GIVE = {},  -- Table to store damage data per target ID for 'GIVE' action
+    TAKE = {}   -- Table to store damage data per attacker ID for 'TAKE' action
+}
+
+local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
+local menu = new.bool(false)
+local mainc = imgui.ImVec4(0.98, 0.26, 0.26, 1.00)
+local buttonSizeSmall = imgui.ImVec2(45, 37.5)
+local buttonSizeLarge = imgui.ImVec2(91, 37.5)
+
+local get_bone_pos = ffi.cast("int (__thiscall*)(void*, float*, int, bool)", 0x5E4280)
+
+local soundsList = {
+	"sound1.mp3", "sound2.mp3", "sound3.mp3", "sound4.mp3", "sound5.mp3", "sound6.mp3", "sound7.mp3", "sound8.mp3", "roblox.mp3", "mw2.mp3", "bingbong.mp3"
+}
+
+local audioPaths = {}
+local audioExtensions = {
+    mp3 = true, mp4 = true, wav = true, m4a = true, flac = true, ogg = true, 
+    mp2 = true, amr = true, wma = true, aac = true, aiff = true, m4r = true
+}
+
+function main()
+	for _, path in pairs({configDir, resourceDir, audioDir, audioPath}) do
+
+		createDirectory(path)
 	end
+
+	blank_dmg = dmg
+	if doesFileExist(cfg) then
+		loadIni()
+	else
+		blankIni()
+	end
+
+	if dmg.autoupdate then
+		update_script(false)
+	end
+	
+	for action, _ in pairs({GIVE = true, TAKE = true}) do
+		createfont(action)
+	end
+
+	downloadSounds()
+	
+	while not isSampAvailable() do wait(100) end
+
+	sampRegisterChatCommand("dmginfo", function()
+		menu[0] = not menu[0]
+	end)
+
+	wait(-1)
+end
+
+-- Damage Render
+function onD3DPresent()
+    for action, data in pairs(damageData) do
+        local dmgConfig = dmg[action]
+        if not dmgConfig or not dmgConfig.toggle then
+            return
+        end
+        
+        for id, userData in pairs(data) do
+            for k, v in pairs(userData.DamageEntries) do
+                if os.time() > v.time then
+                    table.remove(userData.DamageEntries, k)
+                else
+                    if not isPauseMenuActive() 
+                       and not sampIsDialogActive() 
+                       and not sampIsScoreboardOpen() 
+                       and not isSampfuncsConsoleActive() 
+                       and sampGetChatDisplayMode() > 0 
+                       and dmgConfig.toggle then
+                       
+                        local px, py, pz = getCharCoordinates(ped)
+                        local x, y, z = v.pos.x, v.pos.y, v.pos.z
+                        if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) 
+                           and isPointOnScreen(x, y, z, 0.0) then
+                           
+                            local sx, sy = convert3DCoordsToScreen(x, y, z)
+                            local damageText = string.format("%.1f", (dmgConfig.stacked and v.stacked or v.damage))
+                            renderFontDrawText(fontid[action], (action == "GIVE" and '+' or '-') .. damageText, sx, sy, dmgConfig.color)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Cleanup Damage Data
+    cleanupDamageData()
+end
+
+function cleanupDamageData()
+    for action, data in pairs(damageData) do
+        for id, userData in pairs(data) do
+            local toRemove = {}
+            for k, v in pairs(userData.DamageEntries) do
+                if os.time() > v.time then
+                    table.insert(toRemove, k)
+                end
+            end
+            for i = #toRemove, 1, -1 do
+                table.remove(userData.DamageEntries, toRemove[i])
+            end
+            -- If there are no more damage entries for this user, remove their data
+            if #userData.DamageEntries == 0 then
+                data[id] = nil
+            end
+        end
+    end
+end
+
+-- Global tables to store Bullet Sync data
+local bulletSyncData = {
+    SEND = nil,   -- Data from onSendBulletSync
+    RECEIVE = {}  -- Data from onBulletSync per playerId
+}
+
+-- OnSendBulletSync Event Handler
+function sampev.onSendBulletSync(data)
+    bulletSyncData.SEND = {
+        targetType = data.targetType,
+        targetId = data.targetId,
+        target = { x = data.target.x, y = data.target.y, z = data.target.z },
+        weaponId = data.weaponId
+    }
+end
+
+-- OnBulletSync Event Handler
+function sampev.onBulletSync(playerId, data)
+    local _, localPed = sampGetPlayerIdByCharHandle(ped)
+    if localPed ~= playerId then
+        bulletSyncData.RECEIVE[playerId] = {
+            targetType = data.targetType,
+            targetId = data.targetId,
+            target = { x = data.target.x, y = data.target.y, z = data.target.z },
+            weaponId = data.weaponId
+        }
+    end
+end
+
+-- Damage Event Handler
+local function handleDamageEvent(action, id, damage, weapon, Bodypart)
+    if not dmg[action].toggle then
+        return 
+    end
+    
+    if damage < 1 then
+        return 
+    end
+
+    -- Use Bullet Sync data to get reliable information
+    local bulletData = nil
+    if action == "GIVE" then
+        bulletData = bulletSyncData.SEND
+    elseif action == "TAKE" then
+        bulletData = bulletSyncData.RECEIVE[id]
+    end
+
+    if not bulletData then
+        if weapon >= 0 and weapon <= 18 then
+            local result, localPed = sampGetCharHandleBySampPlayerId(id)
+            if result then
+                local x, y, z = getCharCoordinates(action == "GIVE" and localPed or ped)
+                bulletData = {
+                    target = {x = x, y = y, z = z}
+                }
+            end
+        else
+            print("[DEBUG] No Bullet Sync data available, cannot proceed.")
+            return
+        end
+    end
+
+    local data = damageData[action]
+    if not data[id] then
+        data[id] = {
+            DamageEntries = {},
+            StackedDamage = 0,
+            PreviousDamage = 0
+        }
+    end
+    local userData = data[id]
+    
+    -- Update stacked damage
+    userData.StackedDamage = userData.StackedDamage + damage
+    
+    -- Remove old damage entry if stacking
+    if dmg[action].stacked then
+        -- Remove existing damage entry for stacking
+        for k, v in pairs(userData.DamageEntries) do
+            if v.stacked then
+                print(string.format("[DEBUG] Removing stacked damage entry at key: %s", tostring(k)))
+                table.remove(userData.DamageEntries, k)
+                break
+            end
+        end
+    end
+
+    -- Use origin coordinates from Bullet Sync data
+    local px, py, pz
+    if action == "GIVE" then
+        px, py, pz = bulletData.target.x, bulletData.target.y, bulletData.target.z
+    elseif action == "TAKE" then
+        px, py, pz = bulletData.target.x, bulletData.target.y, bulletData.target.z
+    end
+
+    -- Create new damage entry
+    local damageEntry = {
+        damage = math.floor(damage),
+        stacked = math.floor(userData.StackedDamage),
+        time = os.time() + dmg[action].time,
+        pos = {x = px, y = py, z = pz},
+        bodypart = Bodypart,
+        weaponId = weapon
+    }
+
+    table.insert(userData.DamageEntries, damageEntry)
+    playsound(action)
+end
+
+-- OnSendGiveDamage Event Handler
+function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
+    local adjustedDamage = weapon == 34 and 34.3 or damage
+    handleDamageEvent("GIVE", targetID, adjustedDamage, weapon, Bodypart)
+
+    -- Clear the SEND Bullet Sync data after handling
+    bulletSyncData.SEND = nil
+end
+
+-- OnSendTakeDamage Event Handler
+function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
+    local adjustedDamage = weapon == 34 and 34.3 or damage
+    handleDamageEvent("TAKE", senderID, adjustedDamage, weapon, Bodypart)
+
+    -- Clear the RECEIVE Bullet Sync data for this senderID after handling
+    bulletSyncData.RECEIVE[senderID] = nil
+end
+
+-- OnWindowMessage
+function onWindowMessage(msg, wparam, lparam)
+    if wparam == VK_ESCAPE and menu[0] then
+        if msg == wm.WM_KEYDOWN then
+            consumeWindowMessage(true, false)
+        end
+        if msg == wm.WM_KEYUP then
+            menu[0] = false
+        end
+    end
+end
+
+-- OnInitialize
+imgui.OnInitialize(function()
+	apply_custom_style()
+
+	scanGameFolder(audioPath, audioPaths)
+
+	local config = imgui.ImFontConfig()
+	config.MergeMode = true
+    config.PixelSnapH = true
+    config.GlyphMinAdvanceX = 14
+    local builder = imgui.ImFontGlyphRangesBuilder()
+    local list = {
+		"GEAR",
+		"POWER_OFF",
+		"FLOPPY_DISK",
+		"REPEAT",
+		"ERASER",
+		"RETWEET"
+	}
+	for _, b in ipairs(list) do
+		builder:AddText(fa(b))
+	end
+	defaultGlyphRanges1 = imgui.ImVector_ImWchar()
+	builder:BuildRanges(defaultGlyphRanges1)
+	imgui.GetIO().Fonts:AddFontFromMemoryCompressedBase85TTF(fa.get_font_data_base85("solid"), 14, config, defaultGlyphRanges1[0].Data)
+
+	imgui.GetIO().IniFilename = nil
+end)
+
+imgui.OnFrame(function() return menu[0] end,
+function()
+    local width, height = getScreenResolution()
+    imgui.SetNextWindowPos(imgui.ImVec2(width / 2, height / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
+    imgui.Begin(fa.GEAR .. string.format("%s Settings - Version: %s", script.this.name, script_version_text), menu, 
+        imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize)
+        
+        -- Left Panel
+        imgui.BeginChild("##1", imgui.ImVec2(95, 270), true)
+			-- Left Panel Buttons
+			local buttons = {
+				{action = "GIVE", label = fa.POWER_OFF .. '##GIVE', toggle = dmg.GIVE.toggle, size = buttonSizeSmall, tooltip = "Give damage toggle", onClick = function() dmg.GIVE.toggle = not dmg.GIVE.toggle end},
+				{action = "TAKE", label = fa.POWER_OFF .. '##TAKE', toggle = dmg.TAKE.toggle, size = buttonSizeSmall, tooltip = "Take damage toggle", onClick = function() dmg.TAKE.toggle = not dmg.TAKE.toggle end},
+				{action = "SAVE", label = fa.FLOPPY_DISK .. '##save', toggle = false, size = buttonSizeLarge, tooltip = "Save the Script", onClick = saveIni},
+				{action = "RELOAD", label = fa.REPEAT .. '##reload', toggle = false, size = buttonSizeLarge, tooltip = "Reload the Script", onClick = loadIni},
+				{action = "RESET", label = fa.ERASER .. '##reset', toggle = false, size = buttonSizeLarge, tooltip = "Reset the Script to default settings", onClick = blankIni},
+				{action = "UPDATE", label = fa.RETWEET .. ' Update', toggle = false, size = buttonSizeLarge, tooltip = "Update the script", onClick = function() update_script(true) end},
+			}
+
+			for idx, btn in ipairs(buttons) do
+				if idx <= 2 then
+					-- Position the first two buttons side by side
+					local offsetX = (idx - 1) * 46 -- Adjust spacing as needed
+					imgui.SetCursorPos(imgui.ImVec2(1 + offsetX, 1))
+					createButton(btn.label, btn.toggle, btn.size, btn.tooltip, btn.onClick)
+				else
+					-- Position the remaining buttons vertically
+					local posY = 40 + (idx - 3) * 38
+					imgui.SetCursorPos(imgui.ImVec2(1, posY))
+					createButton(btn.label, btn.toggle, btn.size, btn.tooltip, btn.onClick)
+				end
+			end
+
+			-- Checkboxes for Autosave and Autoupdate
+			local checkboxes = {
+				{label = 'Autosave', key = 'autosave'},
+				{label = 'Autoupdate', key = 'autoupdate'},
+			}
+
+			for idx, cb in ipairs(checkboxes) do
+				local posY = 203 + (idx - 1) * 41
+				imgui.SetCursorPos(imgui.ImVec2(5, posY))
+				local currentValue = dmg[cb.key]
+				if imgui.Checkbox(cb.label, new.bool(currentValue)) then
+					dmg[cb.key] = not dmg[cb.key]
+				end
+			end
+        imgui.EndChild()
+
+        -- Right Panel
+        imgui.SetCursorPos(imgui.ImVec2(100, 25))
+        imgui.BeginChild("##3", imgui.ImVec2(345, 270), true)
+			renderFontSettings("GIVE")
+			renderFontSettings("TAKE")
+        imgui.EndChild()
+    imgui.End()
+    imgui.PopStyleVar(1)
+end)
+
+function renderFontSettings(action)
+    local dmgAction = dmg[action]
+
+    -- Font Name Input
+    imgui.PushItemWidth(95)
+    local text = new.char[30](dmgAction.font)
+    if imgui.InputText('##font'..action, text, sizeof(text), imgui.InputTextFlags.EnterReturnsTrue) then
+        dmgAction.font = u8:decode(str(text))
+        createfont(action)
+    end
+    imgui.PopItemWidth()
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip('Change the font')
+    end
+
+    -- Font Flags Combo
+    imgui.SameLine()
+    local flagChoices = {'Bold', 'Italics', 'Border', 'Shadow'}
+    imgui.PushItemWidth(60)
+    if imgui.BeginCombo("##flags"..action, 'Flags') then
+        for k, flag in ipairs(flagChoices) do
+            if imgui.Checkbox(flag, new.bool(dmgAction.fontflag[k])) then
+                dmgAction.fontflag[k] = not dmgAction.fontflag[k]
+                createfont(action)
+            end
+        end
+        imgui.EndCombo()
+    end
+    imgui.PopItemWidth()
+
+    -- Color Picker
+    imgui.SameLine()
+    imgui.PushItemWidth(95)
+    local tcolor = new.float[4](convertHex(dmgAction.color, true, true))
+    if imgui.ColorEdit4('Color##'..action, tcolor, imgui.ColorEditFlags.NoInputs + imgui.ColorEditFlags.NoLabel) then
+        dmgAction.color = joinRGBA(tcolor[3], tcolor[0], tcolor[1], tcolor[2], true)
+    end
+    imgui.PopItemWidth()
+    imgui.SameLine()
+    imgui.Text('Color')
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip('Color of text')
+    end
+
+    -- Stacked Checkbox
+    imgui.SameLine()
+    if imgui.Checkbox('Stacked##'..action, new.bool(dmgAction.stacked)) then
+        dmgAction.stacked = not dmgAction.stacked
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip('Stacked Damage Per-Player')
+    end
+
+    -- Font Size Controls
+    imgui.BeginGroup()
+        if imgui.Button('+##'..action) and dmgAction.fontsize < 72 then
+            dmgAction.fontsize = dmgAction.fontsize + 1
+            createfont(action)
+        end
+        imgui.SameLine()
+        imgui.Text(tostring(dmgAction.fontsize))
+        imgui.SameLine()
+        if imgui.Button('-##'..action) and dmgAction.fontsize > 4 then
+            dmgAction.fontsize = dmgAction.fontsize - 1
+            createfont(action)
+        end
+    imgui.EndGroup()
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip('Size of text')
+    end
+    imgui.SameLine()
+    imgui.Text('Fontsize')
+
+    -- Display Time Controls
+    imgui.BeginGroup()
+        if imgui.Button('+##2'..action) and dmgAction.time < 10 then
+            dmgAction.time = dmgAction.time + 1
+            createfont(action)
+        end
+        imgui.SameLine()
+        imgui.Text(tostring(dmgAction.time))
+        imgui.SameLine()
+        if imgui.Button('-##2'..action) and dmgAction.time > 1 then
+            dmgAction.time = dmgAction.time - 1
+            createfont(action)
+        end
+    imgui.EndGroup()
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip('Displayed time')
+    end
+    imgui.SameLine()
+    imgui.Text('Time')
+
+    -- Sound Dropdown
+    sound_dropdownmenu(action)
+end
+
+function sound_dropdownmenu(action)
+    local audioConfig = dmg[action].audio
+
+    if imgui.Checkbox('##3'..action, new.bool(audioConfig.toggle)) then
+        audioConfig.toggle = not audioConfig.toggle
+    end
+    imgui.SameLine()
+    if audioConfig.toggle then
+        imgui.PushItemWidth(150)
+            if imgui.BeginCombo("##sounds"..action, audioConfig.sound) then
+                for _, v in ipairs(audioPaths) do
+                    if matchAudioFiles(v.File) then
+                        if imgui.Selectable(u8(v.File), v.File == audioConfig.sound) then
+                            audioConfig.sound = v.File
+                            playsound(action)
+                        end
+                    end
+                end
+                imgui.EndCombo()
+            end
+        imgui.PopItemWidth()
+        imgui.SameLine()
+        imgui.PushItemWidth(150)
+        local volume = new.float[1](audioConfig.volume)
+        if imgui.SliderFloat('##Volume##' .. action, volume, 0, 1) then
+            audioConfig.volume = volume[0]
+        end
+        imgui.PopItemWidth()
+
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip('Volume Control')
+        end
+    else
+        imgui.Text('Disabled')
+    end
 end
 
 function onScriptTerminate(scr, quitGame)
@@ -528,175 +596,243 @@ function onScriptTerminate(scr, quitGame)
 	end
 end
 
-function createfont(id)
-	local flags, flagids = {}, {flag.BOLD,flag.ITALICS,flag.BORDER,flag.SHADOW}
-	for i = 1, 4 do
-		flags[i] = dmg.fontflag[id][i] and flagids[i] or 0
-	end
-	fontid[id] = renderCreateFont(dmg.font[id], dmg.fontsize[id], flags[1] + flags[2] + flags[3] + flags[4])
-end
-
 function blankIni()
-	dmg = table.deepcopy(blank)
+	dmg = blank_dmg
 	saveIni()
 	loadIni()
 end
 
 function loadIni()
-	local f = io.open(cfg, "r") if f then dmg = decodeJson(f:read("*all")) f:close() end
+	local f = io.open(cfg, "r")
+	if f then
+		dmg = decodeJson(f:read("*all"))
+		f:close()
+	end
 end
 
 function saveIni()
-	if type(dmg) == "table" then local f = io.open(cfg, "w") f:close() if f then local f = io.open(cfg, "r+") f:write(encodeJson(dmg)) f:close() end end
+    if type(dmg) == "table" then
+        local f = io.open(cfg, "w")
+        if f then
+            f:write(encodeJson(dmg))
+            f:close()
+        end
+    end
 end
 
-function hex2rgba(rgba)
-	local a = bit.band(bit.rshift(rgba, 24),	0xFF)
-	local r = bit.band(bit.rshift(rgba, 16),	0xFF)
-	local g = bit.band(bit.rshift(rgba, 8),		0xFF)
-	local b = bit.band(rgba, 0xFF)
-	return r / 255, g / 255, b / 255, a / 255
+function createfont(action)
+    local flagids = {flag.BOLD, flag.ITALICS, flag.BORDER, flag.SHADOW}
+    local flags = 0
+    local font_flags = dmg[action].fontflag
+
+    if not font_flags then
+        error("Font flags not found for action: " .. tostring(action))
+    end
+
+    for i, fid in ipairs(flagids) do
+        if font_flags[i] then
+            flags = flags + fid
+        end
+    end
+
+    fontid[action] = renderCreateFont(dmg[action].font, dmg[action].fontsize, flags)
 end
 
-function hex2rgba_int(rgba)
-	local a = bit.band(bit.rshift(rgba, 24),	0xFF)
-	local r = bit.band(bit.rshift(rgba, 16),	0xFF)
-	local g = bit.band(bit.rshift(rgba, 8),		0xFF)
-	local b = bit.band(rgba, 0xFF)
-	return r, g, b, a
-end
+function playsound(action)
+    if not dmg[action].audio.toggle then
+        return
+    end
 
-function hex2rgb(rgba)
-	local a = bit.band(bit.rshift(rgba, 24),	0xFF)
-	local r = bit.band(bit.rshift(rgba, 16),	0xFF)
-	local g = bit.band(bit.rshift(rgba, 8),		0xFF)
-	local b = bit.band(rgba, 0xFF)
-	return r / 255, g / 255, b / 255
-end
+    local soundFile = audioPath .. (dmg[action].audio.sound or "")
+    if not doesFileExist(soundFile) then
+        sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} Error missing sound file: %s", script.this.name, soundFile), -1)
+        return
+    end
 
-function hex2rgb_int(rgba)
-	local a = bit.band(bit.rshift(rgba, 24),	0xFF)
-	local r = bit.band(bit.rshift(rgba, 16),	0xFF)
-	local g = bit.band(bit.rshift(rgba, 8),		0xFF)
-	local b = bit.band(rgba, 0xFF)
-	return r, g, b
-end
+    local sound = loadAudioStream(soundFile)
+    if not sound then
+        sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} Error playing sound: %s", script.this.name, soundFile), -1)
+        return
+    end
 
-function join_argb(a, r, g, b)
-	local argb = b  -- b
-	argb = bit.bor(argb, bit.lshift(g, 8))  -- g
-	argb = bit.bor(argb, bit.lshift(r, 16)) -- r
-	argb = bit.bor(argb, bit.lshift(a, 24)) -- a
-	return argb
-end
-
-function join_argb_int(a, r, g, b)
-	local argb = b * 255
-    argb = bit.bor(argb, bit.lshift(g * 255, 8))
-    argb = bit.bor(argb, bit.lshift(r * 255, 16))
-    argb = bit.bor(argb, bit.lshift(a, 24))
-    return argb
+    local volume = dmg[action].audio.volume or 1.0 -- Default volume if not specified
+    setAudioStreamVolume(sound, volume)
+    setAudioStreamState(sound, 1)
 end
 
 function scanGameFolder(path, tables)
     for file in lfs.dir(path) do
         if file ~= "." and file ~= ".." then
-            --local f = path..'\\'..file
-			local f = path..file
-			local file_extension = string.match(file, "([^\\%.]+)$") -- Avoids double "extension" file names from being included and seen as "audiofile"
-            if file_extension:match("mp3") or file_extension:match("mp4") or file_extension:match("wav") or file_extension:match("m4a") or file_extension:match("flac") or file_extension:match("m4r") or file_extension:match("ogg")
-			or file_extension:match("mp2") or file_extension:match("amr") or file_extension:match("wma") or file_extension:match("aac") or file_extension:match("aiff") then
-				table.insert(tables, file)
-                tables[file] = f
-            end 
-            if lfs.attributes(f, "mode") == "directory" then
-                tables = scanGameFolder(f, tables)
-            end 
+			local file_extension = string.match(file, "([^\\%.]+)$")
+            if file_extension then
+                table.insert(tables, {Path = path, File = file})
+            end
         end
     end
-    return tables
 end
 
-function update_script()
-	update_text = https.request(update_url)
-	update_version = update_text:match("version: (.+)")
-	if tonumber(update_version) > script_version then
-		message('NewUpdate')
-		downloadUrlToFile(script_url, script_path, function(id, status)
-			if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-				message("UpdateSuccessful")
-				update = true
+function matchAudioFiles(f)
+    local ext = f:match("%.([^%.]+)$")
+    return ext and audioExtensions[ext:lower()] or false
+end
+
+function update_script(noupdatecheck)
+	local update_text = https.request(update_url)
+	if update_text ~= nil then
+		update_version = update_text:match("version: (.+)")
+		if update_version ~= nil then
+			if tonumber(update_version) > script_version then
+				sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} New version found! The update is in progress..", script.this.name), -1)
+				downloadUrlToFile(script_url, script_path, function(id, status)
+					if status == dlstatus.STATUS_ENDDOWNLOADDATA then
+						sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} The update was successful! Reloading the script now..", script.this.name), -1)
+						lua_thread.create(function()
+							menu[0] = false
+							wait(500)
+							thisScript():reload()
+						end)
+					end
+				end)
+			else
+				if noupdatecheck then
+					sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} No new version found..", script.this.name), -1)
+				end
 			end
-		end)
+		end
 	end
 end
 
-function sounds_script()
-	local sounds = {"sound1.mp3", "sound2.mp3", "sound3.mp3", "sound4.mp3", "sound5.mp3", "sound6.mp3", "sound7.mp3", "sound8.mp3", "roblox.mp3", "mw2.mp3", "bingbong.mp3"}
-	for k, v in pairs(sounds) do
-		if not doesFileExist(audiopath .. v) then
-			downloadUrlToFile(sounds_url .. v, audiopath .. v, function(id, status)
+function downloadSounds()
+	for k, v in pairs(soundsList) do
+		if not doesFileExist(audioPath .. v) then
+			downloadUrlToFile(sounds_url .. v, audioPath .. v, function(id, status)
 				if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-					print(v .. ' Downloaded')
+					sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} %s Downloaded", script.this.name, v))
 				end
 			end)
 		end
 	end
 end
 
-function apply_custom_style()
-   local style = imgui.GetStyle()
-   local colors = style.Colors
-   local clr = imgui.Col
-   local ImVec4 = imgui.ImVec4
-   style.WindowRounding = 1.5
-   style.WindowTitleAlign = imgui.ImVec2(0.5, 0.5)
-   style.FrameRounding = 1.0
-   style.ItemSpacing = imgui.ImVec2(4.0, 4.0)
-   style.ScrollbarSize = 13.0
-   style.ScrollbarRounding = 0
-   style.GrabMinSize = 8.0
-   style.GrabRounding = 1.0
-   style.WindowBorderSize = 0.0
-   style.WindowPadding = imgui.ImVec2(4.0, 4.0)
-   style.FramePadding = imgui.ImVec2(2.5, 3.5)
-   style.ButtonTextAlign = imgui.ImVec2(0.5, 0.35)
+function convertHex(rgba, normalize, includeAlpha)
+    local r = bit.band(bit.rshift(rgba, 16), 0xFF)
+    local g = bit.band(bit.rshift(rgba, 8), 0xFF)
+    local b = bit.band(rgba, 0xFF)
+    local a = bit.band(bit.rshift(rgba, 24), 0xFF)
 
-   colors[clr.Text]                   = ImVec4(1.00, 1.00, 1.00, 1.00)
-   colors[clr.TextDisabled]           = ImVec4(0.7, 0.7, 0.7, 1.0)
-   colors[clr.WindowBg]               = ImVec4(0.07, 0.07, 0.07, 1.0)
-   colors[clr.PopupBg]                = ImVec4(0.08, 0.08, 0.08, 0.94)
-   colors[clr.Border]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.4)
-   colors[clr.BorderShadow]           = ImVec4(0.00, 0.00, 0.00, 0.00)
-   colors[clr.FrameBg]                = ImVec4(mainc.x, mainc.y, mainc.z, 0.7)
-   colors[clr.FrameBgHovered]         = ImVec4(mainc.x, mainc.y, mainc.z, 0.4)
-   colors[clr.FrameBgActive]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.9)
-   colors[clr.TitleBg]                = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
-   colors[clr.TitleBgActive]          = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
-   colors[clr.TitleBgCollapsed]       = ImVec4(mainc.x, mainc.y, mainc.z, 0.79)
-   colors[clr.MenuBarBg]              = ImVec4(0.14, 0.14, 0.14, 1.00)
-   colors[clr.ScrollbarBg]            = ImVec4(0.02, 0.02, 0.02, 0.53)
-   colors[clr.ScrollbarGrab]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
-   colors[clr.ScrollbarGrabHovered]   = ImVec4(0.41, 0.41, 0.41, 1.00)
-   colors[clr.ScrollbarGrabActive]    = ImVec4(0.51, 0.51, 0.51, 1.00)
-   colors[clr.CheckMark]              = ImVec4(mainc.x + 0.13, mainc.y + 0.13, mainc.z + 0.13, 1.00)
-   colors[clr.SliderGrab]             = ImVec4(0.28, 0.28, 0.28, 1.00)
-   colors[clr.SliderGrabActive]       = ImVec4(0.35, 0.35, 0.35, 1.00)
-   colors[clr.Button]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
-   colors[clr.ButtonHovered]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
-   colors[clr.ButtonActive]           = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
-   colors[clr.Header]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.6)
-   colors[clr.HeaderHovered]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.43)
-   colors[clr.HeaderActive]           = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
-   colors[clr.Separator]              = colors[clr.Border]
-   colors[clr.SeparatorHovered]       = ImVec4(0.26, 0.59, 0.98, 0.78)
-   colors[clr.SeparatorActive]        = ImVec4(0.26, 0.59, 0.98, 1.00)
-   colors[clr.ResizeGrip]             = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
-   colors[clr.ResizeGripHovered]      = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
-   colors[clr.ResizeGripActive]       = ImVec4(mainc.x, mainc.y, mainc.z, 1.0)
-   colors[clr.PlotLines]              = ImVec4(0.61, 0.61, 0.61, 1.00)
-   colors[clr.PlotLinesHovered]       = ImVec4(1.00, 0.43, 0.35, 1.00)
-   colors[clr.PlotHistogram]          = ImVec4(0.90, 0.70, 0.00, 1.00)
-   colors[clr.PlotHistogramHovered]   = ImVec4(1.00, 0.60, 0.00, 1.00)
-   colors[clr.TextSelectedBg]         = ImVec4(0.26, 0.59, 0.98, 0.35)
+    if normalize then
+        r, g, b, a = r / 255, g / 255, b / 255, a / 255
+    end
+
+    if includeAlpha then
+        return r, g, b, a
+    else
+        return r, g, b
+    end
+end
+
+function joinRGBA(a, r, g, b, normalized)
+    if normalized then
+        a, r, g, b = math.floor(a * 255 + 0.5), math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)
+    end
+    return bit.bor(
+        bit.lshift(a, 24),
+        bit.lshift(r, 16),
+        bit.lshift(g, 8),
+        b
+    )
+end
+
+function createButton(label, toggle, size, tooltip, onClick)
+	local colorNormal = toggle and imgui.ImVec4(0.15, 0.59, 0.18, 0.7) or imgui.ImVec4(1, 0.19, 0.19, 0.5)
+	local colorHover = toggle and imgui.ImVec4(0.15, 0.59, 0.18, 0.5) or imgui.ImVec4(1, 0.19, 0.19, 0.3)
+	local colorActive = toggle and imgui.ImVec4(0.15, 0.59, 0.18, 0.4) or imgui.ImVec4(1, 0.19, 0.19, 0.2)
+
+	if imgui.CustomButton(label, colorNormal, colorHover, colorActive, size) then
+		onClick()
+	end
+
+	if imgui.IsItemHovered() then
+		imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(8, 8))
+		imgui.SetTooltip(tooltip)
+		imgui.PopStyleVar()
+	end
+end
+
+function imgui.CustomButton(name, color, colorHovered, colorActive, size)
+    local clr = imgui.Col
+    imgui.PushStyleColor(clr.Button, color)
+    imgui.PushStyleColor(clr.ButtonHovered, colorHovered)
+    imgui.PushStyleColor(clr.ButtonActive, colorActive)
+    if not size then size = imgui.ImVec2(0, 0) end
+    local result = imgui.Button(name, size)
+    imgui.PopStyleColor(3)
+    return result
+end
+
+function apply_custom_style()
+	imgui.SwitchContext()
+	local ImVec4 = imgui.ImVec4
+	local ImVec2 = imgui.ImVec2
+	local style = imgui.GetStyle()
+	style.WindowRounding = 0
+	style.WindowPadding = ImVec2(8, 8)
+	style.WindowTitleAlign = ImVec2(0.5, 0.5)
+	style.FrameRounding = 0
+	style.ItemSpacing = ImVec2(8, 4)
+	style.ScrollbarSize = 10
+	style.ScrollbarRounding = 3
+	style.GrabMinSize = 10
+	style.GrabRounding = 0
+	style.Alpha = 1
+	style.FramePadding = ImVec2(4, 3)
+	style.ItemInnerSpacing = ImVec2(4, 4)
+	style.TouchExtraPadding = ImVec2(0, 0)
+	style.IndentSpacing = 21
+	style.ColumnsMinSpacing = 6
+	style.ButtonTextAlign = ImVec2(0.5, 0.5)
+	style.DisplayWindowPadding = ImVec2(0, 0)
+	style.DisplaySafeAreaPadding = ImVec2(4, 4)
+	style.AntiAliasedLines = true
+	style.CurveTessellationTol = 1.25
+	
+	local colors = style.Colors
+	local clr = imgui.Col
+	colors[clr.FrameBg]                = ImVec4(mainc.x, mainc.y, mainc.z, 0.54)
+    colors[clr.FrameBgHovered]         = ImVec4(mainc.x, mainc.y, mainc.z, 0.40)
+    colors[clr.FrameBgActive]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.67)
+    colors[clr.TitleBg]                = ImVec4(mainc.x, mainc.y, mainc.z, 0.6)
+    colors[clr.TitleBgActive]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+    colors[clr.TitleBgCollapsed]       = ImVec4(mainc.x, mainc.y, mainc.z, 0.40)
+	colors[clr.CheckMark]              = ImVec4(mainc.x + 0.13, mainc.y + 0.13, mainc.z + 0.13, 0.8)
+	colors[clr.SliderGrab]             = ImVec4(mainc.x, mainc.y, mainc.z, 1.00)
+	colors[clr.SliderGrabActive]       = ImVec4(mainc.x, mainc.y, mainc.z, 1.00)
+	colors[clr.Button]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.40)
+	colors[clr.ButtonHovered]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
+	colors[clr.ButtonActive]           = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+	colors[clr.Header]                 = ImVec4(mainc.x, mainc.y, mainc.z, 0.40)
+	colors[clr.HeaderHovered]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
+	colors[clr.HeaderActive]           = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+	colors[clr.Separator]              = colors[clr.Border]
+	colors[clr.SeparatorHovered]       = ImVec4(0.75, 0.10, 0.10, 0.78)
+	colors[clr.SeparatorActive]        = ImVec4(0.75, 0.10, 0.10, 1.00)
+	colors[clr.ResizeGrip]             = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+    colors[clr.ResizeGripHovered]      = ImVec4(mainc.x, mainc.y, mainc.z, 0.63)
+    colors[clr.ResizeGripActive]       = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+	colors[clr.TextSelectedBg]         = ImVec4(0.98, 0.26, 0.26, 0.35)
+	colors[clr.Text]                   = ImVec4(1.00, 1.00, 1.00, 1.00)
+	colors[clr.TextDisabled]           = ImVec4(0.50, 0.50, 0.50, 1.00)
+	colors[clr.WindowBg]               = ImVec4(0.06, 0.06, 0.06, 0.94)
+	colors[clr.PopupBg]                = ImVec4(0.08, 0.08, 0.08, 0.94)
+	colors[clr.Border]                 = ImVec4(0.06, 0.06, 0.06, 0.00)
+	colors[clr.BorderShadow]           = ImVec4(0.00, 0.00, 0.00, 0.00)
+	colors[clr.MenuBarBg]              = ImVec4(0.14, 0.14, 0.14, 1.00)
+	colors[clr.ScrollbarBg]            = ImVec4(0.02, 0.02, 0.02, 0.53)
+	colors[clr.ScrollbarGrab]          = ImVec4(mainc.x, mainc.y, mainc.z, 0.8)
+	colors[clr.ScrollbarGrabHovered]   = ImVec4(0.41, 0.41, 0.41, 1.00)
+	colors[clr.ScrollbarGrabActive]    = ImVec4(0.51, 0.51, 0.51, 1.00)
+	colors[clr.PlotLines]              = ImVec4(0.61, 0.61, 0.61, 1.00)
+	colors[clr.PlotLinesHovered]       = ImVec4(1.00, 0.43, 0.35, 1.00)
+	colors[clr.PlotHistogram]          = ImVec4(0.90, 0.70, 0.00, 1.00)
+	colors[clr.PlotHistogramHovered]   = ImVec4(1.00, 0.60, 0.00, 1.00)
 end
