@@ -3,7 +3,7 @@ script_author("akacross")
 script_url("https://akacross.net/")
 
 local script_version = 1.8
-local script_version_text = "1.8.02"
+local script_version_text = "1.8.03"
 
 -- Dependency Manager
 local function safeRequire(module)
@@ -169,37 +169,38 @@ end
 
 -- Damage Render
 function onD3DPresent()
+    if isPauseMenuActive() or sampIsDialogActive() or sampIsScoreboardOpen() or isSampfuncsConsoleActive() or sampGetChatDisplayMode() == 0 then
+        return
+    end
+
     for action, data in pairs(damageData) do
         local dmgConfig = dmg[action]
         if not dmgConfig or not dmgConfig.toggle then
-            return
+            goto continue  -- Skip to the next action
         end
-        
+
         for id, userData in pairs(data) do
-            for k, v in pairs(userData.DamageEntries) do
+            -- Collect indices of entries to remove
+            local indicesToRemove = {}
+            for k = #userData.DamageEntries, 1, -1 do
+                local v = userData.DamageEntries[k]
                 if os.time() > v.time then
                     table.remove(userData.DamageEntries, k)
                 else
-                    if not isPauseMenuActive() 
-                       and not sampIsDialogActive() 
-                       and not sampIsScoreboardOpen() 
-                       and not isSampfuncsConsoleActive() 
-                       and sampGetChatDisplayMode() > 0 
-                       and dmgConfig.toggle then
-                       
-                        local px, py, pz = getCharCoordinates(ped)
-                        local x, y, z = v.pos.x, v.pos.y, v.pos.z
-                        if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false) 
-                           and isPointOnScreen(x, y, z, 0.0) then
-                           
-                            local sx, sy = convert3DCoordsToScreen(x, y, z)
-                            local damageText = string.format("%.1f", (dmgConfig.stacked and v.stacked or v.damage))
-                            renderFontDrawText(fontid[action], (action == "GIVE" and '+' or '-') .. damageText, sx, sy, dmgConfig.color)
-                        end
+                    local px, py, pz = getCharCoordinates(ped)
+                    local x, y, z = v.pos.x, v.pos.y, v.pos.z
+                    if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false)
+                       and isPointOnScreen(x, y, z, 0.0) then
+
+                        local sx, sy = convert3DCoordsToScreen(x, y, z)
+                        local damageText = string.format("%.1f", (dmgConfig.stacked and v.stacked or v.damage))
+                        renderFontDrawText(fontid[action], (action == "GIVE" and '+' or '-') .. damageText, sx, sy, dmgConfig.color)
                     end
                 end
             end
+            -- No need to remove entries here since we did it safely in the loop
         end
+        ::continue::
     end
 
     -- Cleanup Damage Data
@@ -209,16 +210,6 @@ end
 function cleanupDamageData()
     for action, data in pairs(damageData) do
         for id, userData in pairs(data) do
-            local toRemove = {}
-            for k, v in pairs(userData.DamageEntries) do
-                if os.time() > v.time then
-                    table.insert(toRemove, k)
-                end
-            end
-            for i = #toRemove, 1, -1 do
-                table.remove(userData.DamageEntries, toRemove[i])
-            end
-            -- If there are no more damage entries for this user, remove their data
             if #userData.DamageEntries == 0 then
                 data[id] = nil
             end
@@ -299,6 +290,9 @@ local function handleDamageEvent(action, id, damage, weapon, Bodypart)
     local userData = data[id]
     
     -- Update stacked damage
+    if userData.StackedDamage > 200 then
+        userData.StackedDamage = 0
+    end
     userData.StackedDamage = userData.StackedDamage + damage
     
     -- Remove old damage entry if stacking
