@@ -123,11 +123,11 @@ local mainc = imgui.ImVec4(0.98, 0.26, 0.26, 1.00)
 local buttonSizeSmall = imgui.ImVec2(45, 37.5)
 local buttonSizeLarge = imgui.ImVec2(91, 37.5)
 
-local get_bone_pos = ffi.cast("int (__thiscall*)(void*, float*, int, bool)", 0x5E4280)
-
 local soundsList = {
 	"sound1.mp3", "sound2.mp3", "sound3.mp3", "sound4.mp3", "sound5.mp3", "sound6.mp3", "sound7.mp3", "sound8.mp3", "roblox.mp3", "mw2.mp3", "bingbong.mp3"
 }
+
+local playSound = nil
 
 local audioPaths = {}
 local audioExtensions = {
@@ -173,48 +173,39 @@ function onD3DPresent()
         return
     end
 
-    for action, data in pairs(damageData) do
-        local dmgConfig = dmg[action]
-        if not dmgConfig or not dmgConfig.toggle then
-            goto continue  -- Skip to the next action
-        end
+    lua_thread.create(function()
+        for action, data in pairs(damageData) do
+            local dmgConfig = dmg[action]
+            if not dmgConfig or not dmgConfig.toggle then
+                goto continue  -- Skip to the next action
+            end
 
-        for id, userData in pairs(data) do
-            -- Collect indices of entries to remove
-            local indicesToRemove = {}
-            for k = #userData.DamageEntries, 1, -1 do
-                local v = userData.DamageEntries[k]
-                if os.time() > v.time then
-                    table.remove(userData.DamageEntries, k)
-                else
-                    local px, py, pz = getCharCoordinates(ped)
-                    local x, y, z = v.pos.x, v.pos.y, v.pos.z
-                    if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false)
-                       and isPointOnScreen(x, y, z, 0.0) then
+            for id, userData in pairs(data) do
+                for k = #userData.DamageEntries, 1, -1 do
+                    local v = userData.DamageEntries[k]
+                    if os.time() > v.time then
+                        table.remove(userData.DamageEntries, k)
+                    else
+                        local px, py, pz = getCharCoordinates(ped)
+                        local x, y, z = v.pos.x, v.pos.y, v.pos.z
+                        if isLineOfSightClear(px, py, pz, x, y, z, false, false, false, false, false)
+                        and isPointOnScreen(x, y, z, 0.0) then
 
-                        local sx, sy = convert3DCoordsToScreen(x, y, z)
-                        local damageText = string.format("%.1f", (dmgConfig.stacked and v.stacked or v.damage))
-                        renderFontDrawText(fontid[action], (action == "GIVE" and '+' or '-') .. damageText, sx, sy, dmgConfig.color)
+                            local sx, sy = convert3DCoordsToScreen(x, y, z)
+                            local damageText = string.format("%.1f", (dmgConfig.stacked and v.stacked or v.damage))
+
+                            if fontid[action] then
+                                local widthText = renderGetFontDrawTextLength(fontid[action], damageText)
+                                local heightText = renderGetFontDrawHeight(fontid[action])
+                                renderFontDrawText(fontid[action], (action == "GIVE" and '+' or '-') .. damageText, sx - (widthText / 2), sy - (heightText / 2), dmgConfig.color)
+                            end
+                        end
                     end
                 end
             end
-            -- No need to remove entries here since we did it safely in the loop
+            ::continue::
         end
-        ::continue::
-    end
-
-    -- Cleanup Damage Data
-    cleanupDamageData()
-end
-
-function cleanupDamageData()
-    for action, data in pairs(damageData) do
-        for id, userData in pairs(data) do
-            if #userData.DamageEntries == 0 then
-                data[id] = nil
-            end
-        end
-    end
+    end)
 end
 
 -- Global tables to store Bullet Sync data
@@ -246,8 +237,18 @@ function sampev.onBulletSync(playerId, data)
     end
 end
 
+-- OnSendGiveDamage Event Handler
+function sampev.onSendGiveDamage(targetID, damage, weapon, _)
+    lua_thread.create(handleDamageEvent, "GIVE", targetID, damage, weapon)
+end
+
+-- OnSendTakeDamage Event Handler
+function sampev.onSendTakeDamage(senderID, damage, weapon, _)
+    lua_thread.create(handleDamageEvent, "TAKE", senderID, damage, weapon)
+end
+
 -- Damage Event Handler
-local function handleDamageEvent(action, id, damage, weapon, Bodypart)
+function handleDamageEvent(action, id, damage, weapon)
     if not dmg[action].toggle then
         return 
     end
@@ -256,22 +257,40 @@ local function handleDamageEvent(action, id, damage, weapon, Bodypart)
         return 
     end
 
+    damage = weapon == 34 and 34.3 or damage
+
     -- Use Bullet Sync data to get reliable information
     local bulletData = nil
     if action == "GIVE" then
         bulletData = bulletSyncData.SEND
     elseif action == "TAKE" then
+
+        local result, playerId = sampGetPlayerIdByCharHandle(ped)
+        if result and id == 65535 then
+            id = playerId
+        end
+
         bulletData = bulletSyncData.RECEIVE[id]
     end
 
-    if not bulletData then
-        if weapon >= 0 and weapon <= 18 then
-            local result, localPed = sampGetCharHandleBySampPlayerId(id)
+    local px, py, pz
+    if bulletData then
+        id = bulletData.targetId
+        px = bulletData.target.x
+        py = bulletData.target.y
+        pz = bulletData.target.z
+    else
+        print(action, weapon, id)
+        if weapon >= 0 and weapon <= 18 or weapon == 54 then
+            local result, playerHandle = sampGetCharHandleBySampPlayerId(id)
             if result then
-                local x, y, z = getCharCoordinates(action == "GIVE" and localPed or ped)
-                bulletData = {
-                    target = {x = x, y = y, z = z}
-                }
+                local x, y, z = getCharCoordinates(action == "GIVE" and playerHandle or ped)
+                px = x
+                py = y
+                pz = z
+            else
+                print("[DEBUG] Invalid player ID.")
+                return
             end
         else
             print("[DEBUG] No Bullet Sync data available, cannot proceed.")
@@ -300,19 +319,11 @@ local function handleDamageEvent(action, id, damage, weapon, Bodypart)
         -- Remove existing damage entry for stacking
         for k, v in pairs(userData.DamageEntries) do
             if v.stacked then
-                print(string.format("[DEBUG] Removing stacked damage entry at key: %s", tostring(k)))
+                --print(string.format("[DEBUG] Removing stacked damage entry at key: %s", tostring(k)))
                 table.remove(userData.DamageEntries, k)
                 break
             end
         end
-    end
-
-    -- Use origin coordinates from Bullet Sync data
-    local px, py, pz
-    if action == "GIVE" then
-        px, py, pz = bulletData.target.x, bulletData.target.y, bulletData.target.z
-    elseif action == "TAKE" then
-        px, py, pz = bulletData.target.x, bulletData.target.y, bulletData.target.z
     end
 
     -- Create new damage entry
@@ -320,31 +331,21 @@ local function handleDamageEvent(action, id, damage, weapon, Bodypart)
         damage = math.floor(damage),
         stacked = math.floor(userData.StackedDamage),
         time = os.time() + dmg[action].time,
-        pos = {x = px, y = py, z = pz},
-        bodypart = Bodypart,
-        weaponId = weapon
+        pos = {
+            x = px, 
+            y = py, 
+            z = pz
+        },
     }
 
     table.insert(userData.DamageEntries, damageEntry)
     playsound(action)
-end
 
--- OnSendGiveDamage Event Handler
-function sampev.onSendGiveDamage(targetID, damage, weapon, Bodypart)
-    local adjustedDamage = weapon == 34 and 34.3 or damage
-    handleDamageEvent("GIVE", targetID, adjustedDamage, weapon, Bodypart)
-
-    -- Clear the SEND Bullet Sync data after handling
-    bulletSyncData.SEND = nil
-end
-
--- OnSendTakeDamage Event Handler
-function sampev.onSendTakeDamage(senderID, damage, weapon, Bodypart)
-    local adjustedDamage = weapon == 34 and 34.3 or damage
-    handleDamageEvent("TAKE", senderID, adjustedDamage, weapon, Bodypart)
-
-    -- Clear the RECEIVE Bullet Sync data for this senderID after handling
-    bulletSyncData.RECEIVE[senderID] = nil
+    if action == "GIVE" then
+        bulletSyncData.SEND = nil
+    elseif action == "TAKE" then
+        bulletSyncData.RECEIVE[id] = nil
+    end
 end
 
 -- OnWindowMessage
@@ -643,15 +644,15 @@ function playsound(action)
         return
     end
 
-    local sound = loadAudioStream(soundFile)
-    if not sound then
+    playSound = loadAudioStream(soundFile)
+    if not playSound then
         sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} Error playing sound: %s", script.this.name, soundFile), -1)
         return
     end
 
     local volume = dmg[action].audio.volume or 1.0 -- Default volume if not specified
-    setAudioStreamVolume(sound, volume)
-    setAudioStreamState(sound, 1)
+    setAudioStreamVolume(playSound, volume)
+    setAudioStreamState(playSound, 1)
 end
 
 function scanGameFolder(path, tables)
