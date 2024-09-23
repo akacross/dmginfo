@@ -192,12 +192,12 @@ function onD3DPresent()
                         and isPointOnScreen(x, y, z, 0.0) then
 
                             local sx, sy = convert3DCoordsToScreen(x, y, z)
-                            local damageText = string.format("%.1f", (dmgConfig.stacked and v.stacked or v.damage))
+                            local damageText = string.format("%s%.1f", action == "GIVE" and '+' or '-', dmgConfig.stacked and v.stacked or v.damage)
 
                             if fontid[action] then
                                 local widthText = renderGetFontDrawTextLength(fontid[action], damageText)
                                 local heightText = renderGetFontDrawHeight(fontid[action])
-                                renderFontDrawText(fontid[action], (action == "GIVE" and '+' or '-') .. damageText, sx - (widthText / 2), sy - (heightText / 2), dmgConfig.color)
+                                renderFontDrawText(fontid[action], damageText, sx - (widthText / 2), sy - (heightText / 2), dmgConfig.color)
                             end
                         end
                     end
@@ -265,8 +265,8 @@ function handleDamageEvent(action, id, damage, weapon)
         bulletData = bulletSyncData.SEND
     elseif action == "TAKE" then
 
-        local result, playerId = sampGetPlayerIdByCharHandle(ped)
-        if result and id == 65535 then
+        local _, playerId = sampGetPlayerIdByCharHandle(ped)
+        if id == 65535 then
             id = playerId
         end
 
@@ -328,8 +328,8 @@ function handleDamageEvent(action, id, damage, weapon)
 
     -- Create new damage entry
     local damageEntry = {
-        damage = math.floor(damage),
-        stacked = math.floor(userData.StackedDamage),
+        damage = damage,
+        stacked = userData.StackedDamage,
         time = os.time() + dmg[action].time,
         pos = {
             x = px, 
