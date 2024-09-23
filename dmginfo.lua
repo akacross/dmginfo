@@ -262,7 +262,12 @@ function handleDamageEvent(action, id, damage, weapon)
     end
 
     -- Use Bullet Sync data to get reliable information
-    local bulletData = action == "GIVE" and bulletSyncData.SEND or bulletSyncData.RECEIVE[id]
+    local bulletData = nil
+    if action == "GIVE" then
+        bulletData = bulletSyncData.SEND
+    elseif action == "TAKE" then
+        bulletData = bulletSyncData.RECEIVE[id]
+    end
 
     -- Get Target Position
     local px, py, pz
@@ -334,7 +339,11 @@ function handleDamageEvent(action, id, damage, weapon)
     playActionSound(action)
 
     -- Reset Bullet Sync Data
-    bulletSyncData[action == "GIVE" and "SEND" or "RECEIVE"][action == "TAKE" and id or nil] = nil
+    if action == "GIVE" then
+        bulletSyncData.SEND = nil
+    elseif action == "TAKE" then
+        bulletSyncData.RECEIVE[id] = nil
+    end
 
     ::continue::
 end
