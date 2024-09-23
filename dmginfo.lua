@@ -1,9 +1,13 @@
 script_name("dmginfo")
-script_author("akacross")
+script_description("Damage Informer")
+script_version("1.8.04")
+script_authors("akacross")
 script_url("https://akacross.net/")
 
-local script_version = 1.8
-local script_version_text = "1.8.03"
+-- Script Information
+local scriptPath = thisScript().path
+local scriptName = thisScript().name
+local scriptVersion = thisScript().version
 
 -- Dependency Manager
 local function safeRequire(module)
@@ -82,7 +86,7 @@ local dmg = {
         stacked = true,
         font = 'Aerial',
         fontsize = 12,
-        fontflag = { true, false, true, true },
+        fontflag = {true, false, true, true},
         color = -1,
         time = 3,
         audio = {
@@ -96,7 +100,7 @@ local dmg = {
         stacked = true,
         font = 'Aerial',
         fontsize = 12,
-        fontflag = { true, false, true, true },
+        fontflag = {true, false, true, true},
         color = -1,
         time = 3,
         audio = {
@@ -105,16 +109,7 @@ local dmg = {
             volume = 0.10
         }
     },
-    autosave = false,
-    autoupdate = false
-}
-
-local fontid = {}
-
--- Damage Data Structure
-local damageData = {
-    GIVE = {},  -- Table to store damage data per target ID for 'GIVE' action
-    TAKE = {}   -- Table to store damage data per attacker ID for 'TAKE' action
+    autosave = false
 }
 
 local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
@@ -123,11 +118,28 @@ local mainc = imgui.ImVec4(0.98, 0.26, 0.26, 1.00)
 local buttonSizeSmall = imgui.ImVec2(45, 37.5)
 local buttonSizeLarge = imgui.ImVec2(91, 37.5)
 
+local fontid = {}
+
+-- Damage Data Structure
+local damageData = {
+    GIVE = {},
+    TAKE = {}
+}
+
+-- Bullet Sync Data Structure
+local bulletSyncData = {
+    SEND = nil,
+    RECEIVE = {}
+}
+
 local soundsList = {
 	"sound1.mp3", "sound2.mp3", "sound3.mp3", "sound4.mp3", "sound5.mp3", "sound6.mp3", "sound7.mp3", "sound8.mp3", "roblox.mp3", "mw2.mp3", "bingbong.mp3"
 }
 
-local playSound = nil
+local soundId = {
+    GIVE = nil,
+    TAKE = nil
+}
 
 local audioPaths = {}
 local audioExtensions = {
@@ -208,19 +220,11 @@ function onD3DPresent()
     end)
 end
 
--- Global tables to store Bullet Sync data
-local bulletSyncData = {
-    SEND = nil,   -- Data from onSendBulletSync
-    RECEIVE = {}  -- Data from onBulletSync per playerId
-}
-
 -- OnSendBulletSync Event Handler
 function sampev.onSendBulletSync(data)
     bulletSyncData.SEND = {
-        targetType = data.targetType,
         targetId = data.targetId,
-        target = { x = data.target.x, y = data.target.y, z = data.target.z },
-        weaponId = data.weaponId
+        target = { x = data.target.x, y = data.target.y, z = data.target.z }
     }
 end
 
@@ -229,10 +233,8 @@ function sampev.onBulletSync(playerId, data)
     local _, localPed = sampGetPlayerIdByCharHandle(ped)
     if localPed ~= playerId then
         bulletSyncData.RECEIVE[playerId] = {
-            targetType = data.targetType,
             targetId = data.targetId,
-            target = { x = data.target.x, y = data.target.y, z = data.target.z },
-            weaponId = data.weaponId
+            target = { x = data.target.x, y = data.target.y, z = data.target.z }
         }
     end
 end
@@ -249,55 +251,51 @@ end
 
 -- Damage Event Handler
 function handleDamageEvent(action, id, damage, weapon)
+    -- Check if the action is enabled
     if not dmg[action].toggle then
-        return 
+        goto continue
     end
     
+    -- Ignore Damage less than 1
     if damage < 1 then
-        return 
+        goto continue
     end
-
-    damage = weapon == 34 and 34.3 or damage
 
     -- Use Bullet Sync data to get reliable information
-    local bulletData = nil
-    if action == "GIVE" then
-        bulletData = bulletSyncData.SEND
-    elseif action == "TAKE" then
+    local bulletData = action == "GIVE" and bulletSyncData.SEND or bulletSyncData.RECEIVE[id]
 
-        local _, playerId = sampGetPlayerIdByCharHandle(ped)
-        if id == 65535 then
-            id = playerId
-        end
-
-        bulletData = bulletSyncData.RECEIVE[id]
-    end
-
+    -- Get Target Position
     local px, py, pz
     if bulletData then
         id = bulletData.targetId
-        px = bulletData.target.x
-        py = bulletData.target.y
-        pz = bulletData.target.z
+        px, py, pz = bulletData.target.x, bulletData.target.y, bulletData.target.z
     else
-        print(action, weapon, id)
-        if weapon >= 0 and weapon <= 18 or weapon == 54 then
+        if weapon >= 0 and weapon <= 18 then
             local result, playerHandle = sampGetCharHandleBySampPlayerId(id)
             if result then
                 local x, y, z = getCharCoordinates(action == "GIVE" and playerHandle or ped)
-                px = x
-                py = y
-                pz = z
+                px, py, pz = x, y, z
             else
-                print("[DEBUG] Invalid player ID.")
-                return
+                print("[DEBUG] Invalid player ID.", id)
+                goto continue
+            end
+        elseif weapon == 54 then
+            if id == 65535 and action == "TAKE" then
+                local x, y, z = getCharCoordinates(ped)
+                px, py, pz = x, y, z - 0.9
+            else
+                goto continue
             end
         else
             print("[DEBUG] No Bullet Sync data available, cannot proceed.")
-            return
+            goto continue
         end
     end
 
+    -- Fix Damage for Weapon ID 34
+    damage = weapon == 34 and 34.3 or damage
+
+    -- Create Damage Data
     local data = damageData[action]
     if not data[id] then
         data[id] = {
@@ -316,10 +314,8 @@ function handleDamageEvent(action, id, damage, weapon)
     
     -- Remove old damage entry if stacking
     if dmg[action].stacked then
-        -- Remove existing damage entry for stacking
         for k, v in pairs(userData.DamageEntries) do
             if v.stacked then
-                --print(string.format("[DEBUG] Removing stacked damage entry at key: %s", tostring(k)))
                 table.remove(userData.DamageEntries, k)
                 break
             end
@@ -327,25 +323,20 @@ function handleDamageEvent(action, id, damage, weapon)
     end
 
     -- Create new damage entry
-    local damageEntry = {
+    table.insert(userData.DamageEntries, {
         damage = damage,
         stacked = userData.StackedDamage,
         time = os.time() + dmg[action].time,
-        pos = {
-            x = px, 
-            y = py, 
-            z = pz
-        },
-    }
+        pos = {x = px, y = py, z = pz}
+    })
 
-    table.insert(userData.DamageEntries, damageEntry)
-    playsound(action)
+    -- Play Sound
+    playActionSound(action)
 
-    if action == "GIVE" then
-        bulletSyncData.SEND = nil
-    elseif action == "TAKE" then
-        bulletSyncData.RECEIVE[id] = nil
-    end
+    -- Reset Bullet Sync Data
+    bulletSyncData[action == "GIVE" and "SEND" or "RECEIVE"][action == "TAKE" and id or nil] = nil
+
+    ::continue::
 end
 
 -- OnWindowMessage
@@ -393,12 +384,11 @@ imgui.OnFrame(function() return menu[0] end,
 function()
     local width, height = getScreenResolution()
     imgui.SetNextWindowPos(imgui.ImVec2(width / 2, height / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-    imgui.PushStyleVarVec2(imgui.StyleVar.WindowPadding, imgui.ImVec2(0, 0))
-    imgui.Begin(fa.GEAR .. string.format("%s Settings - Version: %s", script.this.name, script_version_text), menu, 
+    imgui.Begin(string.format("%s %s Settings - v%s", fa.GEAR, scriptName:capitalizeFirst(), scriptVersion), menu, 
         imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize)
         
         -- Left Panel
-        imgui.BeginChild("##1", imgui.ImVec2(95, 270), true)
+        imgui.BeginChild("##1", imgui.ImVec2(95, 270), false)
 			-- Left Panel Buttons
 			local buttons = {
 				{action = "GIVE", label = fa.POWER_OFF .. '##GIVE', toggle = dmg.GIVE.toggle, size = buttonSizeSmall, tooltip = "Give damage toggle", onClick = function() dmg.GIVE.toggle = not dmg.GIVE.toggle end},
@@ -425,8 +415,7 @@ function()
 
 			-- Checkboxes for Autosave and Autoupdate
 			local checkboxes = {
-				{label = 'Autosave', key = 'autosave'},
-				{label = 'Autoupdate', key = 'autoupdate'},
+				{label = 'Autosave', key = 'autosave'}
 			}
 
 			for idx, cb in ipairs(checkboxes) do
@@ -446,7 +435,6 @@ function()
 			renderFontSettings("TAKE")
         imgui.EndChild()
     imgui.End()
-    imgui.PopStyleVar(1)
 end)
 
 function renderFontSettings(action)
@@ -482,9 +470,9 @@ function renderFontSettings(action)
     -- Color Picker
     imgui.SameLine()
     imgui.PushItemWidth(95)
-    local tcolor = new.float[4](convertHex(dmgAction.color, true, true))
+    local tcolor = new.float[4](convertColor(dmgAction.color, true, true, false))
     if imgui.ColorEdit4('Color##'..action, tcolor, imgui.ColorEditFlags.NoInputs + imgui.ColorEditFlags.NoLabel) then
-        dmgAction.color = joinRGBA(tcolor[3], tcolor[0], tcolor[1], tcolor[2], true)
+        dmgAction.color = joinARGB(tcolor[3], tcolor[0], tcolor[1], tcolor[2], true)
     end
     imgui.PopItemWidth()
     imgui.SameLine()
@@ -560,7 +548,7 @@ function sound_dropdownmenu(action)
                     if matchAudioFiles(v.File) then
                         if imgui.Selectable(u8(v.File), v.File == audioConfig.sound) then
                             audioConfig.sound = v.File
-                            playsound(action)
+                            playActionSound(action)
                         end
                     end
                 end
@@ -569,9 +557,9 @@ function sound_dropdownmenu(action)
         imgui.PopItemWidth()
         imgui.SameLine()
         imgui.PushItemWidth(150)
-        local volume = new.float[1](audioConfig.volume)
-        if imgui.SliderFloat('##Volume##' .. action, volume, 0, 1) then
-            audioConfig.volume = volume[0]
+        local volume = new.float[1](audioConfig.volume * 100)
+        if imgui.SliderFloat('##Volume##' .. action, volume, 0, 100, "Volume: %.0f%%") then
+            audioConfig.volume = volume[0] / 100
         end
         imgui.PopItemWidth()
 
@@ -633,26 +621,28 @@ function createfont(action)
     fontid[action] = renderCreateFont(dmg[action].font, dmg[action].fontsize, flags)
 end
 
-function playsound(action)
+function playActionSound(action)
     if not dmg[action].audio.toggle then
-        return
+        goto continue
     end
 
     local soundFile = audioPath .. (dmg[action].audio.sound or "")
     if not doesFileExist(soundFile) then
-        sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} Error missing sound file: %s", script.this.name, soundFile), -1)
-        return
+        formattedAddChatMessage(string.format("Error missing sound file: %s", soundFile))
+        goto continue
     end
 
-    playSound = loadAudioStream(soundFile)
-    if not playSound then
-        sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} Error playing sound: %s", script.this.name, soundFile), -1)
-        return
+    soundId[action] = loadAudioStream(soundFile)
+    if not soundId[action] then
+        formattedAddChatMessage(string.format("Error playing sound: %s", soundFile))
+        goto continue
     end
 
     local volume = dmg[action].audio.volume or 1.0 -- Default volume if not specified
-    setAudioStreamVolume(playSound, volume)
-    setAudioStreamState(playSound, 1)
+    setAudioStreamVolume(soundId[action], volume)
+    setAudioStreamState(soundId[action], 1)
+
+    ::continue::
 end
 
 function scanGameFolder(path, tables)
@@ -671,71 +661,61 @@ function matchAudioFiles(f)
     return ext and audioExtensions[ext:lower()] or false
 end
 
-function update_script(noupdatecheck)
-	local update_text = https.request(update_url)
-	if update_text ~= nil then
-		update_version = update_text:match("version: (.+)")
-		if update_version ~= nil then
-			if tonumber(update_version) > script_version then
-				sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} New version found! The update is in progress..", script.this.name), -1)
-				downloadUrlToFile(script_url, script_path, function(id, status)
-					if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-						sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} The update was successful! Reloading the script now..", script.this.name), -1)
-						lua_thread.create(function()
-							menu[0] = false
-							wait(500)
-							thisScript():reload()
-						end)
-					end
-				end)
-			else
-				if noupdatecheck then
-					sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} No new version found..", script.this.name), -1)
-				end
-			end
-		end
-	end
-end
-
 function downloadSounds()
 	for k, v in pairs(soundsList) do
 		if not doesFileExist(audioPath .. v) then
 			downloadUrlToFile(sounds_url .. v, audioPath .. v, function(id, status)
 				if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-					sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} %s Downloaded", script.this.name, v))
+					formattedAddChatMessage(string.format("%s Downloaded", v))
 				end
 			end)
 		end
 	end
 end
 
-function convertHex(rgba, normalize, includeAlpha)
-    local r = bit.band(bit.rshift(rgba, 16), 0xFF)
-    local g = bit.band(bit.rshift(rgba, 8), 0xFF)
-    local b = bit.band(rgba, 0xFF)
-    local a = bit.band(bit.rshift(rgba, 24), 0xFF)
+-- Convert Color
+function convertColor(color, normalize, includeAlpha, hexColor)
+    if type(color) ~= "number" then
+        error("Invalid color value. Expected a number.")
+    end
+
+    local r = bit.band(bit.rshift(color, 16), 0xFF)
+    local g = bit.band(bit.rshift(color, 8), 0xFF)
+    local b = bit.band(color, 0xFF)
+    local a = includeAlpha and bit.band(bit.rshift(color, 24), 0xFF) or 255
 
     if normalize then
         r, g, b, a = r / 255, g / 255, b / 255, a / 255
     end
 
-    if includeAlpha then
-        return r, g, b, a
+    if hexColor then
+        return includeAlpha and string.format("%02X%02X%02X%02X", a, r, g, b) or string.format("%02X%02X%02X", r, g, b)
     else
-        return r, g, b
+        return includeAlpha and {r, g, b, a} or {r, g, b}
     end
 end
 
-function joinRGBA(a, r, g, b, normalized)
+-- Join ARGB
+function joinARGB(a, r, g, b, normalized)
     if normalized then
-        a, r, g, b = math.floor(a * 255 + 0.5), math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)
+        a, r, g, b = math.floor(a * 255), math.floor(r * 255), math.floor(g * 255), math.floor(b * 255)
     end
-    return bit.bor(
-        bit.lshift(a, 24),
-        bit.lshift(r, 16),
-        bit.lshift(g, 8),
-        b
-    )
+
+    local function clamp(value)
+        return math.max(0, math.min(255, value))
+    end
+
+    return bit.bor(bit.lshift(clamp(a), 24), bit.lshift(clamp(r), 16), bit.lshift(clamp(g), 8), clamp(b))
+end
+
+-- Formatted Add Chat Message
+function formattedAddChatMessage(string)
+    sampAddChatMessage(string.format("{ABB2B9}[%s]{FFFFFF} %s", scriptName:capitalizeFirst(), string), -1)
+end
+
+-- Capitalize First Letter
+function string:capitalizeFirst()
+    return self:gsub("^%l", string.upper)
 end
 
 function createButton(label, toggle, size, tooltip, onClick)
